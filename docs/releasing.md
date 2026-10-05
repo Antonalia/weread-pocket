@@ -39,7 +39,7 @@ npm run package
 
 ## GitHub Release
 
-在 [Antonalia/weread-pocket](https://github.com/Antonalia/weread-pocket) 提交本次发布的源码与文档。Release 标签必须与 manifest 的版本完全相同，例如 **0.4.5**，不要在标签前加 `v`。给该 Release 分别上传 **main.js、manifest.json、styles.css**，并附上 ZIP 与 `SHA256SUMS.txt`，方便手动安装与校验；单独上传 ZIP 不够。
+在 [Antonalia/weread-pocket](https://github.com/Antonalia/weread-pocket) 提交本次发布的源码与文档。Release 标签必须与 manifest 的版本完全相同，例如首个公开版本 **1.0.0**，不要在标签前加 `v`。给该 Release 分别上传 **main.js、manifest.json、styles.css**，并附上 ZIP 与 `SHA256SUMS.txt`，方便手动安装与校验；单独上传 ZIP 不够。
 
 提交社区目录是另一步。按[官方提交流程](https://docs.obsidian.md/plugins/releasing/submit-plugin)在 Obsidian Community 关联 GitHub 并提交项目，然后根据审查反馈修订。当前文档与本地检查没有宣称项目已被官方审核。
 

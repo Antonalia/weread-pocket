@@ -2,7 +2,7 @@
 
 **在 Obsidian 里读微信读书，也读本地 EPUB / TXT。** WeRead Pocket 是一个桌面端 Obsidian 阅读插件：用浮动小窗或侧栏边记笔记边阅读，也适合想随手收起、继续打开的「摸鱼阅读」场景。支持文献卡片外观、自定义快捷键与按窗口保存的排版。
 
-[![Version](https://img.shields.io/badge/version-0.4.5-8b83c9)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.0.0-8b83c9)](./manifest.json)
 [![Desktop](https://img.shields.io/badge/Obsidian-desktop-7c63bd)](./docs/compatibility.md)
 [![License](https://img.shields.io/badge/license-MIT-50a68c)](./LICENSE)
 
@@ -10,7 +10,7 @@
 
 ![阅读位置与文献卡片示意](./docs/preview.svg)
 
-> **桌面端 · 手动安装。** 需要 Obsidian **1.13.7 或更新版本**，实际验证环境为 Windows；暂未提交 Obsidian 社区插件目录，不能在内置市场搜索安装。微信读书网页内部结构变化可能影响功能，详见[兼容性说明](./docs/compatibility.md)。
+> **首个公开版本 1.0.0 · 桌面端 · 手动安装。** 需要 Obsidian **1.13.7 或更新版本**，实际验证环境为 Windows；暂未提交 Obsidian 社区插件目录，不能在内置市场搜索安装。微信读书网页内部结构变化可能影响功能，详见[兼容性说明](./docs/compatibility.md)。
 
 ## 能做什么
 
@@ -31,7 +31,7 @@
 
 ## 安装与开始阅读
 
-1. 打开 [GitHub Releases](https://github.com/Antonalia/weread-pocket/releases/latest)，下载 `weread-pocket-0.4.5.zip`，或分别下载 **main.js、manifest.json、styles.css**。GitHub 自动生成的 Source code 压缩包用于开发，不是可直接安装的插件包。
+1. 打开 [GitHub Releases](https://github.com/Antonalia/weread-pocket/releases/latest)，下载 `weread-pocket-1.0.0.zip`，或分别下载 **main.js、manifest.json、styles.css**。GitHub 自动生成的 Source code 压缩包用于开发，不是可直接安装的插件包。
 2. 在你的 Obsidian 笔记库中创建 `.obsidian/plugins/weread-pocket/`。使用自定义配置目录时，将 `.obsidian` 换成实际目录。
 3. 解压 ZIP，将三个插件文件直接放进 `weread-pocket/`，不要再嵌套一层文件夹。更新时覆盖这三个文件，保留现有 `data.json`。
 4. 重新加载 Obsidian，在「设置 → 社区插件」关闭受限模式并启用 **WeRead Pocket**。
@@ -89,7 +89,7 @@ npm run verify
 npm run package
 ```
 
-`npm run package` 使用 Windows PowerShell，在 `dist/0.4.5/` 生成发布附件、`weread-pocket-0.4.5.zip` 与 `SHA256SUMS.txt`。GitHub Release 需要分别附上三个插件文件；ZIP 用于本地手动安装。**上述命令不会发布、推送或修改 Obsidian 仓库。**
+`npm run package` 使用 Windows PowerShell，在 `dist/1.0.0/` 生成发布附件、`weread-pocket-1.0.0.zip` 与 `SHA256SUMS.txt`。GitHub Release 需要分别附上三个插件文件；ZIP 用于本地手动安装。**上述命令不会发布、推送或修改 Obsidian 仓库。**
 
 | 文件夹 | 内容 |
 | --- | --- |
