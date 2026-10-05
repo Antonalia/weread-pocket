@@ -1,0 +1,196 @@
+{
+  "version": "0.3.0",
+  "pass": true,
+  "checks": [
+    {
+      "name": "Both EPUB and TXT import",
+      "pass": true
+    },
+    {
+      "name": "TXT opens in retained surface",
+      "pass": true
+    },
+    {
+      "name": "Only current TXT chapter decoded",
+      "pass": true
+    },
+    {
+      "name": "Local floating uses its own font profile",
+      "pass": true
+    },
+    {
+      "name": "Local floating reuses guest and DOM",
+      "pass": true
+    },
+    {
+      "name": "Local dock uses its own font profile",
+      "pass": true
+    },
+    {
+      "name": "Local dock reuses guest and DOM",
+      "pass": true
+    },
+    {
+      "name": "Local sidebar uses its own font profile",
+      "pass": true
+    },
+    {
+      "name": "Local sidebar reuses guest and DOM",
+      "pass": true
+    },
+    {
+      "name": "Local tab uses its own font profile",
+      "pass": true
+    },
+    {
+      "name": "Local tab reuses guest and DOM",
+      "pass": true
+    },
+    {
+      "name": "Window movement does not reread chapter",
+      "pass": true
+    },
+    {
+      "name": "Local progress saved by paragraph",
+      "pass": true
+    },
+    {
+      "name": "Typography reflow keeps paragraph",
+      "pass": true
+    },
+    {
+      "name": "Compact local chapter catalog",
+      "pass": true
+    },
+    {
+      "name": "Catalog filters chapters",
+      "pass": true
+    },
+    {
+      "name": "TXT chapter navigation",
+      "pass": true
+    },
+    {
+      "name": "EPUB opens",
+      "pass": true
+    },
+    {
+      "name": "Old TXT handle released",
+      "pass": true
+    },
+    {
+      "name": "Unsafe book markup stays inert",
+      "pass": true
+    },
+    {
+      "name": "EPUB local raster image rendered",
+      "pass": true
+    },
+    {
+      "name": "EPUB raster decodes locally",
+      "pass": true
+    },
+    {
+      "name": "Internal footnote entry preserved",
+      "pass": true
+    },
+    {
+      "name": "Footnote jumps within current chapter",
+      "pass": true
+    },
+    {
+      "name": "EPUB chapter link and anchor",
+      "pass": true
+    },
+    {
+      "name": "Local literature cards render",
+      "pass": true
+    },
+    {
+      "name": "Local cards use all five colors",
+      "pass": true
+    },
+    {
+      "name": "Local card edges align",
+      "pass": true
+    },
+    {
+      "name": "Local card English and Chinese share type and spacing",
+      "pass": true
+    },
+    {
+      "name": "Local dock card matches existing sidebar grid",
+      "pass": true
+    },
+    {
+      "name": "WeRead source returns to same guest",
+      "pass": true
+    },
+    {
+      "name": "Returning to local book restores progress",
+      "pass": true
+    },
+    {
+      "name": "Local source restores last chapter",
+      "pass": true
+    },
+    {
+      "name": "Unified shortcut hides local reader",
+      "pass": true
+    },
+    {
+      "name": "Unified shortcut restores local reader",
+      "pass": true
+    },
+    {
+      "name": "Bookshelf shows two local books",
+      "pass": true
+    },
+    {
+      "name": "Sources and positions cause no official navigation",
+      "pass": true
+    }
+  ],
+  "measurements": [
+    {
+      "location": "floating",
+      "fontSize": "14px",
+      "lineHeight": "21px",
+      "width": 378,
+      "height": 248
+    },
+    {
+      "location": "dock",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "width": 429.5,
+      "height": 130
+    },
+    {
+      "location": "sidebar",
+      "fontSize": "18px",
+      "lineHeight": "27px",
+      "width": 432.5,
+      "height": 750
+    },
+    {
+      "location": "tab",
+      "fontSize": "21px",
+      "lineHeight": "31.5px",
+      "width": 665.3984375,
+      "height": 750
+    },
+    {
+      "dockReference": {
+        "left": 9,
+        "right": 406.5,
+        "cardLeft": 9,
+        "cardRight": 406.5
+      }
+    }
+  ],
+  "guestNavigation": 0,
+  "originalPreferencesRestored": true,
+  "restoredLocation": "dock",
+  "restoredSource": "weread"
+}

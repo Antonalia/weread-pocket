@@ -1,0 +1,112 @@
+{
+  "version": "0.4.1",
+  "passed": true,
+  "checks": [
+    {
+      "name": "local source has no official guest",
+      "pass": true
+    },
+    {
+      "name": "installed EPUB uses scoped publisher stylesheet",
+      "pass": true
+    },
+    {
+      "name": "local floating reuses same book DOM and parser",
+      "pass": true
+    },
+    {
+      "name": "local floating keeps chapter and paragraph during move",
+      "pass": true
+    },
+    {
+      "name": "local dock reuses same book DOM and parser",
+      "pass": true
+    },
+    {
+      "name": "local dock keeps chapter and paragraph during move",
+      "pass": true
+    },
+    {
+      "name": "local sidebar reuses same book DOM and parser",
+      "pass": true
+    },
+    {
+      "name": "local sidebar keeps chapter and paragraph during move",
+      "pass": true
+    },
+    {
+      "name": "local tab reuses same book DOM and parser",
+      "pass": true
+    },
+    {
+      "name": "local tab keeps chapter and paragraph during move",
+      "pass": true
+    },
+    {
+      "name": "custom prose applies two em indent",
+      "pass": true
+    },
+    {
+      "name": "custom mode has no live publisher stylesheet",
+      "pass": true
+    },
+    {
+      "name": "publisher choice restores original stylesheet without recreating book",
+      "pass": true
+    },
+    {
+      "name": "WeRead source releases local DOM book and file handle",
+      "pass": true
+    },
+    {
+      "name": "WeRead creates one guest with persistent login partition",
+      "pass": true
+    },
+    {
+      "name": "WeRead floating reuses same guest",
+      "pass": true
+    },
+    {
+      "name": "WeRead dock reuses same guest",
+      "pass": true
+    },
+    {
+      "name": "WeRead sidebar reuses same guest",
+      "pass": true
+    },
+    {
+      "name": "WeRead tab reuses same guest",
+      "pass": true
+    },
+    {
+      "name": "returning local destroys old Electron guest",
+      "pass": true
+    },
+    {
+      "name": "source return restores chapter and paragraph",
+      "pass": true
+    },
+    {
+      "name": "local continuous DOM remains limited to three chapters",
+      "pass": true
+    }
+  ],
+  "measurements": [
+    {
+      "phase": "publisher",
+      "font": "16px",
+      "indent": "32px",
+      "line": "20.8px",
+      "paragraph": "16px",
+      "stylesheetBytes": 4674
+    }
+  ],
+  "restored": {
+    "source": "local",
+    "location": "tab",
+    "typography": "publisher",
+    "chapterPreserved": true,
+    "paragraphPreserved": true,
+    "guestCount": 0
+  }
+}

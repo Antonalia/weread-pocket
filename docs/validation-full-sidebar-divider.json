@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-05",
+  "pluginVersion": "0.4.5",
+  "scope": "Full reader in right sidebar",
+  "method": "Actual pointer hover, screenshot pixel scan and native surface rectangles",
+  "nativeGuests": 1,
+  "retainedSameGuest": true,
+  "installedPadding": "3px",
+  "handle": {
+    "left": 989,
+    "right": 992,
+    "top": 44,
+    "bottom": 828,
+    "width": 3,
+    "height": 784
+  },
+  "surface": {
+    "left": 992,
+    "right": 1424,
+    "top": 78,
+    "bottom": 828,
+    "width": 432,
+    "height": 750
+  },
+  "toolbar": {
+    "left": 992,
+    "right": 1424,
+    "top": 44,
+    "bottom": 78,
+    "width": 432,
+    "height": 34
+  },
+  "hover": true,
+  "color": "rgb(112, 123, 194)",
+  "physicalRowsChecked": 1564,
+  "nonPurpleRows": 0,
+  "observedColors": [
+    "112,123,194"
+  ],
+  "handleReceivesPointerAtAllSamplePoints": true,
+  "surfaceClearOfHandle": true,
+  "pass": true
+}

@@ -1,0 +1,13 @@
+{
+  "validatedAt": "2026-10-04T02:55:50.777Z",
+  "pluginVersion": "0.2.5",
+  "cardCount": 37,
+  "tagRows": 0,
+  "tags": 0,
+  "oldFooterHeight": 29,
+  "heightReduction": 29,
+  "removedWholeFooter": true,
+  "location": "dock",
+  "nativeGuests": 1,
+  "pass": true
+}

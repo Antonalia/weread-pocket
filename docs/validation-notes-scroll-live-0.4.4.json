@@ -1,0 +1,51 @@
+{
+  "version": "0.4.4",
+  "verification": "Actual page DOM events, computed styles, and host scroll commands",
+  "checks": [
+    {
+      "name": "Book root is locked and notes have contained overflow",
+      "pass": true
+    },
+    {
+      "name": "Compact item gap and content gap",
+      "pass": true
+    },
+    {
+      "name": "Note font remains 14px",
+      "pass": true
+    },
+    {
+      "name": "Notes middle wheel retains default scrolling and cannot reach book handlers",
+      "pass": true
+    },
+    {
+      "name": "Notes top wheel retains default scrolling and cannot reach book handlers",
+      "pass": true
+    },
+    {
+      "name": "Notes bottom wheel retains default scrolling and cannot reach book handlers",
+      "pass": true
+    },
+    {
+      "name": "Background wheel is blocked while notes are open",
+      "pass": true
+    },
+    {
+      "name": "Arrow key moves notes without moving book",
+      "pass": true
+    },
+    {
+      "name": "Host scroll shortcut moves notes without moving book",
+      "pass": true
+    },
+    {
+      "name": "Native close removes root lock and restores wheel default",
+      "pass": true
+    },
+    {
+      "name": "Book scroll command resumes after notes close",
+      "pass": true
+    }
+  ],
+  "pass": true
+}

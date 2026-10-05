@@ -1,0 +1,100 @@
+{
+  "validatedAt": "2026-10-04T03:10:38.760Z",
+  "pluginVersion": "0.2.6",
+  "fixture": "Reading location, mode, boolean preference and underline element counts only; no book text or account identifiers.",
+  "cases": [
+    {
+      "mode": "reading",
+      "location": "floating",
+      "expected": false,
+      "applied": false,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 0,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "reading",
+      "location": "dock",
+      "expected": true,
+      "applied": true,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 41,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "reading",
+      "location": "sidebar",
+      "expected": false,
+      "applied": false,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 0,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "reading",
+      "location": "tab",
+      "expected": true,
+      "applied": true,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 38,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "card",
+      "location": "floating",
+      "expected": true,
+      "applied": true,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 46,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "card",
+      "location": "dock",
+      "expected": false,
+      "applied": false,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 0,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "card",
+      "location": "sidebar",
+      "expected": true,
+      "applied": true,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 41,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    },
+    {
+      "mode": "card",
+      "location": "tab",
+      "expected": false,
+      "applied": false,
+      "matchingNativeProfile": true,
+      "ready": true,
+      "paintedLines": 0,
+      "noLayerWhenHidden": true,
+      "sameGuest": true
+    }
+  ],
+  "restoredLocation": true,
+  "restoredFlags": true,
+  "restoredCards": true,
+  "nativeGuests": 1,
+  "pass": true
+}

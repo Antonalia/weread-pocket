@@ -1,0 +1,79 @@
+{
+  "version": "0.4.1",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "normal EPUB prose has exactly two em first-line indent",
+      "pass": true,
+      "details": {
+        "indent": 40
+      }
+    },
+    {
+      "name": "nested inline leading full-width spaces are removed once",
+      "pass": true
+    },
+    {
+      "name": "publisher typography and handlers cannot override own style",
+      "pass": true
+    },
+    {
+      "name": "chapter and section headings are unindented",
+      "pass": true
+    },
+    {
+      "name": "blockquote paragraphs do not receive prose indent",
+      "pass": true
+    },
+    {
+      "name": "list paragraphs do not receive prose indent",
+      "pass": true
+    },
+    {
+      "name": "table paragraphs do not receive prose indent",
+      "pass": true
+    },
+    {
+      "name": "pre and inline code whitespace are preserved",
+      "pass": true
+    },
+    {
+      "name": "paragraph anchors and book links remain intact",
+      "pass": true
+    },
+    {
+      "name": "first-line indent scales with current window font size",
+      "pass": true
+    },
+    {
+      "name": "literature Chinese card body stays aligned without prose indent",
+      "pass": true
+    },
+    {
+      "name": "literature English card quote stays unindented",
+      "pass": true
+    },
+    {
+      "name": "card headers keep their established alignment",
+      "pass": true
+    },
+    {
+      "name": "TXT full-width prefix becomes one two-em indent",
+      "pass": true
+    },
+    {
+      "name": "TXT ASCII prefix avoids double indent",
+      "pass": true
+    },
+    {
+      "name": "manual linebreak and following whitespace remain unchanged",
+      "pass": true
+    }
+  ],
+  "cleanup": {
+    "surfaceRemoved": true,
+    "hostRemoved": true,
+    "styleRemoved": true
+  }
+}

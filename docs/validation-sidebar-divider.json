@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-04",
+  "pluginVersion": "0.2.1",
+  "scope": "Actual Obsidian right-sidebar outer resize divider beside the docked reader",
+  "method": "BrowserWindow.capturePage after real pointer hover; BGRA bitmap inspection and host hit testing",
+  "temporaryPreviewPresent": false,
+  "nativeGuests": 1,
+  "installedPadding": "3px",
+  "handle": {
+    "left": 1006.5,
+    "top": 44,
+    "width": 3,
+    "height": 784
+  },
+  "surface": {
+    "left": 1009.5,
+    "top": 508,
+    "width": 414.5,
+    "height": 290
+  },
+  "hover": true,
+  "color": "rgb(112, 123, 194)",
+  "physicalRowsChecked": 1564,
+  "nonPurpleRows": 0,
+  "observedColors": [
+    "112,123,194"
+  ],
+  "hitTests": [
+    {
+      "region": "upper pane",
+      "resizeHandleReceivesPointer": true
+    },
+    {
+      "region": "native reader body",
+      "resizeHandleReceivesPointer": true
+    },
+    {
+      "region": "reader toolbar",
+      "resizeHandleReceivesPointer": true
+    }
+  ],
+  "dragResize": {
+    "tested": true,
+    "sidebarWidthBefore": 417,
+    "narrowedWidth": 347.5,
+    "restoredWidth": 417.5,
+    "surfaceClearOfHandleBeforeDuringAfter": true,
+    "nativeGuestCountAfter": 1
+  },
+  "pass": true
+}

@@ -1,0 +1,134 @@
+{
+  "version": "0.4.2",
+  "passed": true,
+  "checks": [
+    {
+      "name": "WeRead floating host shortcut scrolls while editor control remains focused",
+      "pass": true
+    },
+    {
+      "name": "WeRead floating reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "WeRead dock host shortcut scrolls while editor control remains focused",
+      "pass": true
+    },
+    {
+      "name": "WeRead dock reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "WeRead sidebar host shortcut scrolls while editor control remains focused",
+      "pass": true
+    },
+    {
+      "name": "WeRead sidebar reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "WeRead tab host shortcut scrolls while editor control remains focused",
+      "pass": true
+    },
+    {
+      "name": "WeRead tab reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "WeRead host next-chapter shortcut changes one chapter without moving focus",
+      "pass": true
+    },
+    {
+      "name": "WeRead host previous-chapter shortcut restores original chapter without moving focus",
+      "pass": true
+    },
+    {
+      "name": "WeRead guest uses the same navigation mapping",
+      "pass": true
+    },
+    {
+      "name": "official paging can be selected for shortcut validation",
+      "pass": true
+    },
+    {
+      "name": "WeRead paged shortcut turns native page and keeps host focus",
+      "pass": true
+    },
+    {
+      "name": "local book is available for cross-source shortcut test",
+      "pass": true
+    },
+    {
+      "name": "local floating host shortcut scrolls without moving editor focus",
+      "pass": true
+    },
+    {
+      "name": "local floating reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "local floating control retains the same DOM parser and no guest",
+      "pass": true
+    },
+    {
+      "name": "local dock host shortcut scrolls without moving editor focus",
+      "pass": true
+    },
+    {
+      "name": "local dock reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "local dock control retains the same DOM parser and no guest",
+      "pass": true
+    },
+    {
+      "name": "local sidebar host shortcut scrolls without moving editor focus",
+      "pass": true
+    },
+    {
+      "name": "local sidebar reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "local sidebar control retains the same DOM parser and no guest",
+      "pass": true
+    },
+    {
+      "name": "local tab host shortcut scrolls without moving editor focus",
+      "pass": true
+    },
+    {
+      "name": "local tab reverse shortcut returns to reading position",
+      "pass": true
+    },
+    {
+      "name": "local tab control retains the same DOM parser and no guest",
+      "pass": true
+    },
+    {
+      "name": "local host next-chapter shortcut opens one chapter at start",
+      "pass": true
+    },
+    {
+      "name": "local host previous-chapter shortcut restores prior chapter at start",
+      "pass": true
+    },
+    {
+      "name": "local captured shortcut prevents native arrow and host duplicate execution",
+      "pass": true
+    },
+    {
+      "name": "local literature card control scrolls while main editor keeps focus",
+      "pass": true
+    }
+  ],
+  "restored": {
+    "source": "weread",
+    "location": "dock",
+    "originalSource": true,
+    "originalLocation": true,
+    "originalURL": true,
+    "fixtureRemoved": true
+  }
+}

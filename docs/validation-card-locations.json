@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-04",
+  "pluginVersion": "0.2.3",
+  "cases": [
+    {
+      "location": "dock",
+      "configured": true,
+      "nativeCards": true,
+      "profile": "card:dock",
+      "sameGuest": true
+    },
+    {
+      "location": "floating",
+      "configured": true,
+      "nativeCards": true,
+      "profile": "card:floating",
+      "sameGuest": true
+    },
+    {
+      "location": "sidebar",
+      "configured": false,
+      "nativeCards": false,
+      "profile": "reading:sidebar",
+      "sameGuest": true
+    },
+    {
+      "location": "tab",
+      "configured": false,
+      "nativeCards": false,
+      "profile": "reading:tab",
+      "sameGuest": true
+    }
+  ],
+  "restoredOriginalLocation": true,
+  "restoredOriginalFlags": true,
+  "nativeGuestCount": 1,
+  "pass": true
+}

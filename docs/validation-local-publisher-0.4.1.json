@@ -1,0 +1,96 @@
+{
+  "version": "0.4.1",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "publisher CSS restores original paragraph font and indent",
+      "pass": true,
+      "details": {
+        "font": "20px",
+        "indent": "40px"
+      }
+    },
+    {
+      "name": "publisher line and paragraph spacing override custom preferences",
+      "pass": true,
+      "details": {
+        "line": "36px",
+        "paragraph": "6px"
+      }
+    },
+    {
+      "name": "original text alignment and ID selectors are retained",
+      "pass": true
+    },
+    {
+      "name": "original wrappers and parent selectors are retained",
+      "pass": true
+    },
+    {
+      "name": "original inline typography is retained",
+      "pass": true
+    },
+    {
+      "name": "original heading keeps source font without duplicate generated title",
+      "pass": true
+    },
+    {
+      "name": "publisher mode preserves leading whitespace verbatim",
+      "pass": true
+    },
+    {
+      "name": "publisher CSS cannot style outside reader",
+      "pass": true
+    },
+    {
+      "name": "URLs imports fonts colors and positioning are absent from live stylesheet",
+      "pass": true
+    },
+    {
+      "name": "custom preferences do not alter publisher typography",
+      "pass": true
+    },
+    {
+      "name": "custom mode uses its saved size spacing and two-em indent",
+      "pass": true
+    },
+    {
+      "name": "custom mode removes publisher inline styles",
+      "pass": true
+    },
+    {
+      "name": "custom mode normalizes old prefix once",
+      "pass": true
+    },
+    {
+      "name": "switching reuses paragraph DOM and removes publisher stylesheet",
+      "pass": true
+    },
+    {
+      "name": "returning to publisher restores hierarchy and whitespace",
+      "pass": true
+    },
+    {
+      "name": "literature cards always use own typography and alignment",
+      "pass": true
+    },
+    {
+      "name": "TXT original mode retains its literal first-line spaces",
+      "pass": true
+    },
+    {
+      "name": "TXT custom mode replaces raw prefixes with single two-em indent",
+      "pass": true
+    },
+    {
+      "name": "typography switches preserve chapter paragraph anchors",
+      "pass": true
+    }
+  ],
+  "cleanup": {
+    "surfaceRemoved": true,
+    "hostRemoved": true,
+    "styleRemoved": true
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "validatedAt": "2026-10-04T02:40:03.610Z",
+  "pluginVersion": "0.2.4",
+  "fixture": "Native card accent styles only; no book text, chapter identifiers or account contents are included.",
+  "palette": [
+    "#ffd400",
+    "#ff6666",
+    "#5fb236",
+    "#2ea8e5",
+    "#a28ae5"
+  ],
+  "allFiveObserved": true,
+  "cases": [
+    {
+      "name": "original",
+      "cardCount": 37,
+      "allIconsMatch": true,
+      "orderStable": true,
+      "sameGuest": true
+    },
+    {
+      "name": "font recollection",
+      "cardCount": 37,
+      "allIconsMatch": true,
+      "orderStable": true,
+      "sameGuest": true
+    },
+    {
+      "name": "spacing recollection",
+      "cardCount": 37,
+      "allIconsMatch": true,
+      "orderStable": true,
+      "sameGuest": true
+    },
+    {
+      "name": "floating",
+      "cardCount": 37,
+      "allIconsMatch": true,
+      "orderStable": true,
+      "sameGuest": true
+    },
+    {
+      "name": "dock",
+      "cardCount": 37,
+      "allIconsMatch": true,
+      "orderStable": true,
+      "sameGuest": true
+    }
+  ],
+  "restoredLocation": true,
+  "restoredProfiles": true,
+  "restoredFlags": true,
+  "nativeGuests": 1,
+  "pass": true
+}

@@ -1,0 +1,25 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const sandbox={require:()=>({Plugin:class{},PluginSettingTab:class{}}),URL,module:{exports:{}},setTimeout,clearTimeout};
+vm.runInNewContext(fs.readFileSync(__dirname+'/../main.js','utf8'),sandbox);
+const Pocket=sandbox.module.exports,migrate=Pocket._test.normalizedLayoutProfiles;
+const legacy={fontSizePx:14,lineHeight:1.6,miniContentPadding:4,contentPadding:80};const profiles=migrate(legacy);
+assert.equal(profiles.floating.fontSizePx,14);assert.equal(profiles.tab.fontSizePx,14);assert.equal(profiles.dock.contentPadding,4);assert.equal(profiles.sidebar.contentPadding,80);
+profiles.tab.fontSizePx=28;profiles.tab.lineHeight=2.4;profiles.tab.paragraphSpacing=24;
+assert.equal(profiles.dock.fontSizePx,14);assert.equal(profiles.dock.lineHeight,1.6);assert.equal(profiles.dock.paragraphSpacing,0);
+const restored=migrate({...legacy,layoutProfiles:profiles});assert.equal(restored.tab.fontSizePx,28);assert.equal(restored.tab.paragraphSpacing,24);
+const p=new Pocket();p.settings={...legacy,layoutProfiles:restored,dockPocket:true};p.expanded=false;p.persist=()=>{};
+assert.equal(p.layoutProfileKey(),'dock');p.activateLayoutProfile();assert.equal(p.settings.fontSizePx,14);
+p.expanded=true;p.readerLeaf={getRoot:()=>({})};p.app={workspace:{rightSplit:{}}};p.activateLayoutProfile();assert.equal(p.layoutProfileKey(),'tab');assert.equal(p.settings.fontSizePx,28);
+p.readerLeaf={getRoot:()=>p.app.workspace.rightSplit};p.activateLayoutProfile();assert.equal(p.layoutProfileKey(),'sidebar');assert.equal(p.settings.fontSizePx,14);
+(async()=>{
+ await p.setProfileOption('floating','lineHeight',2.6);assert.equal(p.layoutProfile('floating').lineHeight,2.6);assert.equal(p.layoutProfile('sidebar').lineHeight,1.6);
+ await p.resetLayoutOption('line','floating');assert.equal(p.layoutProfile('floating').lineHeight,1.9);assert.equal(p.layoutProfile('sidebar').lineHeight,1.6);
+ p.expanded=false;p.settings.dockPocket=false;p.activateLayoutProfile();const task=p.adjustFontSize(1);p.expanded=true;const before=JSON.stringify(p.settings.layoutProfiles);assert.equal(await task,false);assert.equal(JSON.stringify(p.settings.layoutProfiles),before,'A queued old-location edit cannot mutate new-location settings');
+ p.expanded=false;p.readerLeaf=null;p.activateLayoutProfile();p.ready=true;p.navigationRevision=1;p.appearanceGeneration=1;p.syncNativeReaderPadding=async()=>true;
+ let nativeSize=14,orphaned=false;p.refreshFontControls=async()=>({level:1,size:nativeSize,lineHeight:1.9,paragraphSpacing:0,ready:true,preferenceKey:p.typographyPreferenceKey()});
+ p.webview={executeJavaScript:()=>{orphaned=true;return new Promise(()=>{});}};
+ const pending=p.setFontSize(12);while(!orphaned)await new Promise(r=>setTimeout(r,5));p.expanded=true;
+ assert.equal(await pending,false);assert.equal(p.fontBusy,false,'A discarded old guest callback cannot keep controls busy');
+ p.webview.executeJavaScript=async()=>{nativeSize=21;return true;};assert.equal(await p.setFontSize(21),true);assert.equal(p.layoutProfile('tab').fontSizePx,21,'The new position can accept another edit after cancellation');
+ console.log('PASS: profile migration, independent objects, persistence, location detection, inactive editing/reset, stale queued edit guard.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

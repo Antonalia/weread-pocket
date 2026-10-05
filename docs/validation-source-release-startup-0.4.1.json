@@ -1,0 +1,10 @@
+{
+  "version": "0.4.1",
+  "source": "local",
+  "location": "tab",
+  "typography": "publisher",
+  "localLoaded": true,
+  "webviewAbsent": true,
+  "guestCount": 0,
+  "progressPreserved": true
+}

@@ -1,0 +1,51 @@
+{
+  "version": "0.4.5",
+  "layouts": [
+    {
+      "date": "2026-10-05",
+      "version": "0.4.5",
+      "method": "Actual native page collection and rendered control rectangles",
+      "location": "dock",
+      "viewport": {
+        "height": 391,
+        "width": 448
+      },
+      "insets": {
+        "bottom": 64,
+        "top": 40
+      },
+      "headerBottom": 27.98611307144165,
+      "pagerTop": 335.1215515136719,
+      "currentTextTop": 92,
+      "currentTextBottom": 296.1111125946045,
+      "pageCount": 11,
+      "allPagesWithinReservedTextRegion": true,
+      "nativeFooterContainerPresent": true,
+      "pass": true
+    },
+    {
+      "date": "2026-10-05",
+      "version": "0.4.5",
+      "method": "Actual native page collection and rendered control rectangles",
+      "location": "sidebar",
+      "viewport": {
+        "height": 750,
+        "width": 416
+      },
+      "insets": {
+        "bottom": 64,
+        "top": 40
+      },
+      "headerBottom": 28,
+      "pagerTop": 694,
+      "currentTextTop": 44,
+      "currentTextBottom": 621.5,
+      "pageCount": 4,
+      "currentPage": 4,
+      "allPagesWithinReservedTextRegion": true,
+      "nativeFooterContainerPresent": true,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

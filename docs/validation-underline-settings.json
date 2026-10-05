@@ -1,0 +1,35 @@
+{
+  "validatedAt": "2026-10-04T03:12:16.749Z",
+  "pluginVersion": "0.2.6",
+  "cases": [
+    {
+      "mode": "reading",
+      "rows": [
+        "浮动小窗",
+        "侧栏底部小窗",
+        "右侧栏阅读",
+        "工作区标签页"
+      ],
+      "onlySelectedFlagChanged": true,
+      "fourResetButtons": true,
+      "resetEnables": true,
+      "activeReaderUnchanged": true
+    },
+    {
+      "mode": "card",
+      "rows": [
+        "浮动小窗",
+        "侧栏底部小窗",
+        "右侧栏阅读",
+        "工作区标签页"
+      ],
+      "onlySelectedFlagChanged": true,
+      "fourResetButtons": true,
+      "resetEnables": true,
+      "activeReaderUnchanged": true
+    }
+  ],
+  "restoredOriginalFlags": true,
+  "normalPersistenceRestored": true,
+  "pass": true
+}

@@ -1,0 +1,20 @@
+{
+  "version": "0.4.3",
+  "opened": true,
+  "native": {
+    "mutationCallbackDisabled": true,
+    "notes": 25,
+    "showing": true
+  },
+  "actionContainers": 0,
+  "deleteButtons": 0,
+  "closeButtons": 1,
+  "contentFont": "14px",
+  "contentLineHeight": "22.4px",
+  "authorFont": "12px",
+  "viewport": {
+    "width": 422,
+    "height": 250
+  },
+  "pass": true
+}

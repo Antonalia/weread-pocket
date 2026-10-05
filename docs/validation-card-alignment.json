@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-04",
+  "pluginVersion": "0.2.2",
+  "mode": "literature-card dock only",
+  "referenceBounds": {
+    "left": 1003.5,
+    "right": 1401,
+    "accent": 1012.5
+  },
+  "readerBounds": {
+    "left": 1003.5,
+    "right": 1401,
+    "accent": 1012.5
+  },
+  "alignmentErrorCssPixels": {
+    "left": 0,
+    "right": 0,
+    "accent": 0
+  },
+  "typography": {
+    "referenceSize": "12px",
+    "readerSize": "12px",
+    "fontFamilyMatches": true,
+    "englishAlign": "left",
+    "letterSpacing": "normal",
+    "wordSpacing": "0px",
+    "nativeUsesThemeFont": true
+  },
+  "syntheticTextWidthChecks": {
+    "englishTestWidth": {
+      "reference": 371.28125,
+      "reader": 371.28125
+    },
+    "chineseTestWidth": {
+      "reference": 156,
+      "reader": 156
+    }
+  },
+  "nativeGuests": 1,
+  "pass": true
+}

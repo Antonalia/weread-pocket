@@ -1,0 +1,23 @@
+{
+  "name": "weread-pocket",
+  "version": "0.4.5",
+  "description": "Desktop reading surfaces for WeRead and local EPUB/TXT books inside Obsidian.",
+  "private": true,
+  "license": "MIT",
+  "author": "antonalia",
+  "main": "main.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node scripts/check.cjs",
+    "verify": "npm run build && npm test",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
+  },
+  "files": [
+    "main.js",
+    "manifest.json",
+    "styles.css"
+  ]
+}

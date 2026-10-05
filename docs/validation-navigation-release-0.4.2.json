@@ -1,0 +1,32 @@
+{
+  "version": "0.4.2",
+  "assets": [
+    {
+      "name": "main.js",
+      "sha256": "82a9965e9b6b0e9c782c7199e1c9a8a5ca509a33767b026e9b67ed9f5308f5aa",
+      "releaseMatches": true,
+      "installedMatches": true
+    },
+    {
+      "name": "manifest.json",
+      "sha256": "c5b1f38f1a6567fad3dfcbe398c70db800d9ee11556b26bcab1d2f5d7e7f54ab",
+      "releaseMatches": true,
+      "installedMatches": true
+    },
+    {
+      "name": "styles.css",
+      "sha256": "8a9d8d43b13efaff2589ffcf36f02b1299fef9d4399cfb11cec091ed51a1d968",
+      "releaseMatches": true,
+      "installedMatches": true
+    }
+  ],
+  "regressionSuitesPassed": 13,
+  "liveNavigationChecks": 30,
+  "liveNavigationPassed": true,
+  "pagedNavigationPassed": true,
+  "localFixturePassed": true,
+  "settingsLayoutPassed": true,
+  "userStateRestored": true,
+  "unpublished": true,
+  "pass": true
+}

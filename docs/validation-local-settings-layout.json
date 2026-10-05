@@ -1,0 +1,55 @@
+{
+  "validatedAt": "2026-10-04T07:04:48.371Z",
+  "pluginVersion": "0.3.0",
+  "fixture": "Plugin setting labels and geometry only; no private input values or book text.",
+  "cases": [
+    {
+      "name": "current theme / original width",
+      "panelWidth": 674.25,
+      "controls": 58,
+      "rows": 36,
+      "titleInset": 16,
+      "rowTextInset": 12,
+      "minimumControlEdgeGap": 12,
+      "flowText": "连续上下滚动",
+      "flowWidth": 119.59375,
+      "errors": [],
+      "titleErrors": [],
+      "textErrors": [],
+      "pass": true
+    },
+    {
+      "name": "current theme / narrow 420",
+      "panelWidth": 420,
+      "controls": 58,
+      "rows": 36,
+      "titleInset": 16,
+      "rowTextInset": 12,
+      "minimumControlEdgeGap": 12,
+      "flowText": "连续上下滚动",
+      "flowWidth": 287,
+      "errors": [],
+      "titleErrors": [],
+      "textErrors": [],
+      "pass": true
+    },
+    {
+      "name": "current theme / narrow 340",
+      "panelWidth": 340,
+      "controls": 58,
+      "rows": 36,
+      "titleInset": 16,
+      "rowTextInset": 12,
+      "minimumControlEdgeGap": 12,
+      "flowText": "连续上下滚动",
+      "flowWidth": 207,
+      "errors": [],
+      "titleErrors": [],
+      "textErrors": [],
+      "pass": true
+    }
+  ],
+  "restoredContainerStyle": true,
+  "normalPersistenceRestored": true,
+  "pass": true
+}

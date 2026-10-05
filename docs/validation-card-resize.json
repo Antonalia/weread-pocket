@@ -1,0 +1,26 @@
+{
+  "pluginVersion": "0.2.2",
+  "before": {
+    "sidebarWidth": 432.5,
+    "leftError": 0,
+    "rightError": 0,
+    "accentError": 0,
+    "dividerClear": true
+  },
+  "narrow": {
+    "sidebarWidth": 362.5,
+    "leftError": 0,
+    "rightError": 0,
+    "accentError": 0,
+    "dividerClear": true
+  },
+  "restored": {
+    "sidebarWidth": 432.5,
+    "leftError": 0,
+    "rightError": 0,
+    "accentError": 0,
+    "dividerClear": true
+  },
+  "nativeGuests": 1,
+  "pass": true
+}

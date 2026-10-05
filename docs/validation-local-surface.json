@@ -1,0 +1,147 @@
+{
+  "version": "0.4.0",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "empty shelf welcome",
+      "pass": true
+    },
+    {
+      "name": "initial chapter opens",
+      "pass": true
+    },
+    {
+      "name": "one chapter read",
+      "pass": true
+    },
+    {
+      "name": "author scripts styles handlers and external URLs stripped",
+      "pass": true
+    },
+    {
+      "name": "metadata title and duplicate chapter heading omitted safely",
+      "pass": true
+    },
+    {
+      "name": "narrow gutter leaves readable width",
+      "pass": true
+    },
+    {
+      "name": "font and spacing preserve paragraph anchor",
+      "pass": true,
+      "details": {
+        "before": {
+          "chapter": 0,
+          "paragraph": 12,
+          "offset": 0.39758690031600114,
+          "percent": 8.88
+        },
+        "after": {
+          "chapter": 0,
+          "paragraph": 12,
+          "offset": 0.39580162354134957,
+          "percent": 8.6
+        }
+      }
+    },
+    {
+      "name": "rapid typography changes retain one pending anchor",
+      "pass": true
+    },
+    {
+      "name": "rapid typography with resize preserves paragraph anchor",
+      "pass": true,
+      "details": {
+        "before": {
+          "chapter": 0,
+          "paragraph": 12,
+          "offset": 0.39580162354134957,
+          "percent": 8.6
+        },
+        "after": {
+          "chapter": 0,
+          "paragraph": 12,
+          "offset": 0.39488035614913747,
+          "percent": 9.03
+        }
+      }
+    },
+    {
+      "name": "card outer borders align",
+      "pass": true
+    },
+    {
+      "name": "five stable card colors without tags",
+      "pass": true
+    },
+    {
+      "name": "English and Chinese typography matches naturally",
+      "pass": true,
+      "details": {
+        "quote": {
+          "font": "18px",
+          "line": "23.4px"
+        },
+        "body": {
+          "font": "18px",
+          "line": "23.4px"
+        }
+      }
+    },
+    {
+      "name": "fractional dock reference edges align exactly",
+      "pass": true
+    },
+    {
+      "name": "resize callback refreshes asymmetric dock alignment",
+      "pass": true
+    },
+    {
+      "name": "ordinary reading ignores dock reference geometry",
+      "pass": true
+    },
+    {
+      "name": "fractional host width preserves exact dock right edge",
+      "pass": true,
+      "details": {
+        "left": 9,
+        "right": 406.5,
+        "hostWidth": 429.5,
+        "contentWidth": 418.5
+      }
+    },
+    {
+      "name": "compact catalog scrolls",
+      "pass": true
+    },
+    {
+      "name": "catalog search filters chapters",
+      "pass": true
+    },
+    {
+      "name": "internal chapter and anchor navigation",
+      "pass": true
+    },
+    {
+      "name": "stale chapter load cannot replace current content",
+      "pass": true
+    },
+    {
+      "name": "paged wheel steps reader only",
+      "pass": true
+    },
+    {
+      "name": "destroy releases surface",
+      "pass": true
+    }
+  ],
+  "progressEvents": 10,
+  "chapterReads": 4,
+  "errors": [],
+  "cleanup": {
+    "hostRemoved": true,
+    "surfaceRemoved": true,
+    "styleRemoved": true
+  }
+}

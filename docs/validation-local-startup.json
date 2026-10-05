@@ -1,0 +1,168 @@
+{
+  "version": "0.4.0",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "late continuous appearance preserves restored short chapter",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 6,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 75
+        },
+        "stats": {
+          "renderedChapters": 2,
+          "maxRenderedChapters": 2,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            6,
+            7
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "short startup never emits preceding chapter progress",
+      "pass": true,
+      "details": {
+        "chapters": [
+          6
+        ]
+      }
+    },
+    {
+      "name": "hidden startup retains an explicit chapter layout anchor",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 6,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 75
+        },
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            5,
+            6,
+            7
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": true,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "revealing host restores target before visible progress capture",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 6,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 75
+        },
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            5,
+            6,
+            7
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "hidden start and reveal never emit earlier chapter",
+      "pass": true,
+      "details": {
+        "chapters": [
+          6
+        ]
+      }
+    },
+    {
+      "name": "rapid host resizing retains initial chapter anchor",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 6,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 75
+        },
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            5,
+            6,
+            7
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "late previous preload is rejected after current chapter shrinks",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 6,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 75
+        },
+        "stats": {
+          "renderedChapters": 2,
+          "maxRenderedChapters": 2,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            6,
+            7
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "typography shrink never publishes earlier chapter progress",
+      "pass": true,
+      "details": {
+        "chapters": [
+          6,
+          6
+        ]
+      }
+    }
+  ],
+  "cleanup": {
+    "allHostsRemoved": true,
+    "allSurfacesRemoved": true,
+    "styleRemoved": true
+  }
+}

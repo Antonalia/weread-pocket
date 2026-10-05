@@ -1,0 +1,146 @@
+{
+  "version": "0.4.0",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "short starting chapters deliberately fit viewport",
+      "pass": true,
+      "details": {
+        "renderedChapters": 2,
+        "maxRenderedChapters": 2,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0,
+          1
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "tiny chapter 1 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 2 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 3 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 4 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 5 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 6 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "tiny chapter 7 stays inside bound",
+      "pass": true
+    },
+    {
+      "name": "wheel can traverse short chapters without giant padding",
+      "pass": true
+    },
+    {
+      "name": "reverse wheel restores earlier short chapter",
+      "pass": true
+    },
+    {
+      "name": "toolbar page turning traverses short chapters",
+      "pass": true
+    },
+    {
+      "name": "old resource response is ignored after mode generation changes",
+      "pass": true,
+      "details": {
+        "renderedChapters": 1,
+        "maxRenderedChapters": 2,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": false
+      }
+    },
+    {
+      "name": "new generation resumes pending image loading",
+      "pass": true,
+      "details": {
+        "stats": {
+          "renderedChapters": 1,
+          "maxRenderedChapters": 2,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            0
+          ],
+          "imageBytes": 67,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": false
+        },
+        "calls": [
+          0,
+          1,
+          0,
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "name": "pruning image chapter revokes its object URL",
+      "pass": true,
+      "details": {
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            1,
+            2,
+            3
+          ],
+          "imageBytes": 201,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        },
+        "created": 5,
+        "revoked": 2
+      }
+    },
+    {
+      "name": "stale old-book image cannot enter new book",
+      "pass": true
+    },
+    {
+      "name": "destroy revokes every synthetic resource URL",
+      "pass": true,
+      "details": {
+        "created": 5,
+        "revoked": 5
+      }
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "hostRemoved": true,
+    "styleRemoved": true,
+    "surfaceRemoved": true
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "loaded": true,
+  "version": "0.4.0",
+  "migration": {
+    "folder": "WeRead Pocket",
+    "migrated": 0,
+    "discovered": 0,
+    "unavailable": 0
+  },
+  "originalReferencesManaged": 1,
+  "copiedBytesMatch": true,
+  "settled": true,
+  "location": "tab",
+  "source": "weread",
+  "entries": 1,
+  "identityPreserved": true,
+  "managedFilePresent": true,
+  "originalFilePresent": true,
+  "progressPreserved": true,
+  "retiredCommandAbsent": true,
+  "retiredCredentialAbsent": true,
+  "continuousEnabled": true
+}

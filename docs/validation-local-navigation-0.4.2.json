@@ -1,0 +1,164 @@
+{
+  "version": "0.4.2",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "custom shortcut scrolls by three configured lines",
+      "pass": true,
+      "details": {
+        "delta": 75.5
+      }
+    },
+    {
+      "name": "reverse shortcut restores same scroll position",
+      "pass": true
+    },
+    {
+      "name": "scroll shortcuts preserve main-interface focus",
+      "pass": true
+    },
+    {
+      "name": "publisher shortcut uses actual book line height",
+      "pass": true,
+      "details": {
+        "delta": 105
+      }
+    },
+    {
+      "name": "chapter shortcut opens next chapter at its start",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 2,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 28.57
+        }
+      }
+    },
+    {
+      "name": "chapter shortcut preserves main-interface focus",
+      "pass": true
+    },
+    {
+      "name": "previous chapter shortcut opens preceding chapter",
+      "pass": true
+    },
+    {
+      "name": "previous chapter boundary returns false",
+      "pass": true
+    },
+    {
+      "name": "next chapter boundary returns false",
+      "pass": true
+    },
+    {
+      "name": "continuous chapter shortcut reuses cached chapter and jumps to start",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 2,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 28.57
+        },
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            1,
+            2,
+            3
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        }
+      }
+    },
+    {
+      "name": "next continuous chapter is preloaded for visible-anchor check",
+      "pass": true
+    },
+    {
+      "name": "chapter target follows actual visible chapter",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 4,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 57.14
+        }
+      }
+    },
+    {
+      "name": "chapter commands keep continuous window bounded",
+      "pass": true,
+      "details": {
+        "renderedChapters": 3,
+        "maxRenderedChapters": 3,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          3,
+          4,
+          5
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "paged shortcut uses the existing page turn",
+      "pass": true,
+      "details": {
+        "delta": 281.5,
+        "height": 320
+      }
+    },
+    {
+      "name": "rapid chapter commands complete in order",
+      "pass": true,
+      "details": {
+        "progress": {
+          "chapter": 2,
+          "paragraph": 0,
+          "offset": 0,
+          "percent": 28.57
+        }
+      }
+    },
+    {
+      "name": "new book navigation does not wait for old pending read",
+      "pass": true
+    },
+    {
+      "name": "old queued chapter commands cannot overwrite replacement book",
+      "pass": true
+    },
+    {
+      "name": "invalid navigation directions are ignored",
+      "pass": true
+    },
+    {
+      "name": "all background shortcuts preserve focused editor control",
+      "pass": true
+    },
+    {
+      "name": "destroyed reader ignores shortcut commands",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "hostRemoved": true,
+    "surfaceRemoved": true,
+    "inputRemoved": true,
+    "styleRemoved": true
+  }
+}

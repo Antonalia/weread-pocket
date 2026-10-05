@@ -1,0 +1,25 @@
+{
+  "itemCount": 10,
+  "contentCount": 10,
+  "allNoteContentsExpanded": true,
+  "individualScrollableContents": 0,
+  "allRenderedContentsUnclipped": true,
+  "outerListOverflow": "auto",
+  "outerListCanScroll": true,
+  "bodyLocked": true,
+  "bodyDidNotMoveAtListEnd": true,
+  "notesScrolledToEnd": true,
+  "actionContainers": 0,
+  "closeButtons": 1,
+  "notesFontSizes": [
+    "14px"
+  ],
+  "itemMargins": [
+    "12px",
+    "0px"
+  ],
+  "date": "2026-10-05",
+  "version": "0.4.5",
+  "method": "Actual native public notes DOM and nested-scroll boundary event",
+  "pass": true
+}

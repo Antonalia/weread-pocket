@@ -1,0 +1,13 @@
+{
+  "validatedOn": "2026-10-04",
+  "environment": "Obsidian desktop 1.13.7 on Windows",
+  "pluginVersion": "0.2.0",
+  "window": "bottom sidebar pocket",
+  "scope": "Pixel check of the actual installed reader's visible card border; only a text-free border strip was captured.",
+  "cardLayer": 3,
+  "nativeCanvasLayer": 2,
+  "borderPixelRows": 307,
+  "matchingPixelRows": 307,
+  "maximumColorError": 0,
+  "pass": true
+}

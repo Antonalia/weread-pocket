@@ -1,0 +1,269 @@
+{
+  "version": "0.4.1",
+  "runtime": "Obsidian desktop",
+  "passed": true,
+  "checks": [
+    {
+      "name": "continuous current chapter opens immediately",
+      "pass": true
+    },
+    {
+      "name": "initial window mounts current and next only",
+      "pass": true,
+      "details": {
+        "renderedChapters": 2,
+        "maxRenderedChapters": 2,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0,
+          1
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "continuous mode removes previous and next chapter buttons",
+      "pass": true
+    },
+    {
+      "name": "ordinary chapters retain visible generated headings",
+      "pass": true
+    },
+    {
+      "name": "continuous wheel keeps native scrolling",
+      "pass": true
+    },
+    {
+      "name": "visible chapter determines chapter-local progress",
+      "pass": true,
+      "details": {
+        "chapter": 1,
+        "paragraph": 8,
+        "offset": 0.3516927083333333,
+        "percent": 16.66
+      }
+    },
+    {
+      "name": "following chapter extends lazily to three records",
+      "pass": true,
+      "details": {
+        "renderedChapters": 3,
+        "maxRenderedChapters": 3,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0,
+          1,
+          2
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "forward prune and append keep paragraph coordinate",
+      "pass": true,
+      "details": {
+        "stats": {
+          "renderedChapters": 3,
+          "maxRenderedChapters": 3,
+          "maxChapters": 3,
+          "chapterIndexes": [
+            1,
+            2,
+            3
+          ],
+          "imageBytes": 0,
+          "pendingChapterReads": 0,
+          "awaitingLayout": false,
+          "continuous": true
+        },
+        "shift": 0.1015625
+      }
+    },
+    {
+      "name": "backward prepend and prune preserve paragraph position",
+      "pass": true,
+      "details": {
+        "renderedChapters": 3,
+        "maxRenderedChapters": 3,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0,
+          1,
+          2
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "rapid typography and resize retain chapter and paragraph anchor",
+      "pass": true,
+      "details": {
+        "before": {
+          "chapter": 2,
+          "paragraph": 10,
+          "offset": 0.3986545138888889,
+          "percent": 29.61
+        },
+        "after": {
+          "chapter": 2,
+          "paragraph": 10,
+          "offset": 0.39644535840188017,
+          "percent": 29.59
+        }
+      }
+    },
+    {
+      "name": "disabling continuous mode returns to one chapter and compact buttons",
+      "pass": true,
+      "details": {
+        "renderedChapters": 1,
+        "maxRenderedChapters": 3,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          2
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": false
+      }
+    },
+    {
+      "name": "re-enabling continuous mode keeps current paragraph",
+      "pass": true
+    },
+    {
+      "name": "literature mode remains continuous despite paged preference",
+      "pass": true
+    },
+    {
+      "name": "continuous literature cards omit novel chapter headings",
+      "pass": true
+    },
+    {
+      "name": "literature chapter heading anchors still navigate correctly",
+      "pass": true,
+      "details": {
+        "chapter": 2,
+        "paragraph": 0,
+        "offset": 0,
+        "percent": 25
+      }
+    },
+    {
+      "name": "singlechapter literature cards also omit novel headings",
+      "pass": true
+    },
+    {
+      "name": "chapter card colors are stable across layout changes",
+      "pass": true
+    },
+    {
+      "name": "all continuous chapter card borders align at fractional width",
+      "pass": true
+    },
+    {
+      "name": "returning to ordinary reading restores chapter headings",
+      "pass": true
+    },
+    {
+      "name": "link resolves relative to its own adjacent chapter",
+      "pass": true,
+      "details": {
+        "chapter": 6,
+        "paragraph": 8,
+        "offset": 0.0014105902777777778,
+        "percent": 77.5
+      }
+    },
+    {
+      "name": "catalog jump reuses bounded window and chapter anchor",
+      "pass": true,
+      "details": {
+        "renderedChapters": 2,
+        "maxRenderedChapters": 3,
+        "maxChapters": 3,
+        "chapterIndexes": [
+          0,
+          1
+        ],
+        "imageBytes": 0,
+        "pendingChapterReads": 0,
+        "awaitingLayout": false,
+        "continuous": true
+      }
+    },
+    {
+      "name": "chapter 1 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 2 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 3 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 4 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 5 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 6 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "chapter 7 stays inside three-record memory bound",
+      "pass": true
+    },
+    {
+      "name": "native scrolling traverses all chapters to book end",
+      "pass": true,
+      "details": {
+        "chapter": 7,
+        "paragraph": 41,
+        "offset": 0.14274088541666666,
+        "percent": 100
+      }
+    },
+    {
+      "name": "obsolete adjacent loading cannot replace catalog destination",
+      "pass": true
+    },
+    {
+      "name": "book switch cancels previous book chapter reads",
+      "pass": true
+    },
+    {
+      "name": "paged mode uses one chapter and existing wheel step behavior",
+      "pass": true
+    },
+    {
+      "name": "destroy discards all rendered chapters and resources",
+      "pass": true
+    }
+  ],
+  "chapterReads": 31,
+  "progressEvents": 24,
+  "chapterEvents": 19,
+  "errors": [],
+  "cleanup": {
+    "hostRemoved": true,
+    "styleRemoved": true,
+    "surfaceRemoved": true
+  }
+}

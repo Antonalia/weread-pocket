@@ -1,0 +1,49 @@
+{
+  "version": "0.4.1",
+  "validatedAt": "2026-10-04T12:39:10.3830183Z",
+  "assets": [
+    {
+      "file": "main.js",
+      "sourceMatchesRelease": true,
+      "installedMatchesRelease": true,
+      "archiveMatchesRelease": true
+    },
+    {
+      "file": "styles.css",
+      "sourceMatchesRelease": true,
+      "installedMatchesRelease": true,
+      "archiveMatchesRelease": true
+    },
+    {
+      "file": "manifest.json",
+      "sourceMatchesRelease": true,
+      "installedMatchesRelease": true,
+      "archiveMatchesRelease": true
+    }
+  ],
+  "checksums": [
+    {
+      "file": "main.js",
+      "matches": true
+    },
+    {
+      "file": "manifest.json",
+      "matches": true
+    },
+    {
+      "file": "styles.css",
+      "matches": true
+    },
+    {
+      "file": "LICENSE",
+      "matches": true
+    },
+    {
+      "file": "weread-pocket-0.4.1.zip",
+      "matches": true
+    }
+  ],
+  "archiveOnlyContainsPluginFiles": true,
+  "published": false,
+  "passed": true
+}

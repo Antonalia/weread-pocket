@@ -1,0 +1,22 @@
+# Generated plugin entry and release assets
+/main.js
+/dist/
+
+# Dependencies, editor state, and local diagnostics
+node_modules/
+*.log
+.vscode/
+.idea/
+.local/
+.DS_Store
+Thumbs.db
+
+# Never commit a vault, personal settings, or credentials
+.obsidian/
+data.json
+*.local.*
+.env
+.env.*
+!.env.example
+cookies*
+session*

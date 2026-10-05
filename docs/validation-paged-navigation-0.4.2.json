@@ -1,0 +1,14 @@
+{
+  "version": "0.4.2",
+  "pass": true,
+  "checks": [
+    {
+      "name": "WeRead paged next-chapter follows official navigation without moving main focus",
+      "pass": true
+    },
+    {
+      "name": "WeRead paged previous-chapter returns one chapter without moving main focus",
+      "pass": true
+    }
+  ]
+}

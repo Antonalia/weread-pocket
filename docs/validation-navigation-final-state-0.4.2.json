@@ -1,0 +1,30 @@
+{
+  "version": "0.4.2",
+  "restored": {
+    "source": "weread",
+    "location": "dock",
+    "URLRestored": true,
+    "persistenceRestored": true
+  },
+  "ready": true,
+  "nativeReady": true,
+  "commands": [
+    {
+      "name": "WeRead Pocket: 向上滚动阅读正文",
+      "binding": "Ctrl + Alt + ↑"
+    },
+    {
+      "name": "WeRead Pocket: 向下滚动阅读正文",
+      "binding": "Ctrl + Alt + ↓"
+    },
+    {
+      "name": "WeRead Pocket: 阅读上一章",
+      "binding": "Ctrl + Alt + Page Up"
+    },
+    {
+      "name": "WeRead Pocket: 阅读下一章",
+      "binding": "Ctrl + Alt + Page Down"
+    }
+  ],
+  "settingsClosed": true
+}

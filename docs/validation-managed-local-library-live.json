@@ -1,0 +1,174 @@
+{
+  "version": "0.4.0",
+  "pass": true,
+  "checks": [
+    {
+      "name": "EPUB and TXT copied into managed vault folder",
+      "pass": true
+    },
+    {
+      "name": "Import keeps original fixture bytes",
+      "pass": true
+    },
+    {
+      "name": "Repeated imports retain same entries and avoid duplicate copies",
+      "pass": true
+    },
+    {
+      "name": "Old API sync command and setting removed",
+      "pass": true
+    },
+    {
+      "name": "TXT opens with continuous chapters",
+      "pass": true
+    },
+    {
+      "name": "Hidden first local surface retains saved chapter after preload",
+      "pass": true
+    },
+    {
+      "name": "Continuous window bounded to three chapters",
+      "pass": true
+    },
+    {
+      "name": "Continuous reading hides previous and next chapter buttons",
+      "pass": true
+    },
+    {
+      "name": "Local floating applies saved type profile",
+      "pass": true
+    },
+    {
+      "name": "Local floating reuses DOM and guest",
+      "pass": true
+    },
+    {
+      "name": "Local dock applies saved type profile",
+      "pass": true
+    },
+    {
+      "name": "Local dock reuses DOM and guest",
+      "pass": true
+    },
+    {
+      "name": "Local sidebar applies saved type profile",
+      "pass": true
+    },
+    {
+      "name": "Local sidebar reuses DOM and guest",
+      "pass": true
+    },
+    {
+      "name": "Local tab applies saved type profile",
+      "pass": true
+    },
+    {
+      "name": "Local tab reuses DOM and guest",
+      "pass": true
+    },
+    {
+      "name": "Typography keeps chapter and paragraph anchor",
+      "pass": true
+    },
+    {
+      "name": "Disabled switch restores one chapter",
+      "pass": true
+    },
+    {
+      "name": "Disabled switch restores chapter navigation",
+      "pass": true
+    },
+    {
+      "name": "Reenabled switch restores bounded continuous window",
+      "pass": true
+    },
+    {
+      "name": "EPUB opens in same reader",
+      "pass": true
+    },
+    {
+      "name": "Old TXT file handle closed",
+      "pass": true
+    },
+    {
+      "name": "EPUB unsafe markup remains inert",
+      "pass": true
+    },
+    {
+      "name": "Literature cards omit novel chapter headings",
+      "pass": true
+    },
+    {
+      "name": "Continuous chapter records retain literature cards",
+      "pass": true
+    },
+    {
+      "name": "Card edges remain aligned",
+      "pass": true
+    },
+    {
+      "name": "English and Chinese type and spacing match",
+      "pass": true
+    },
+    {
+      "name": "Copied TXT appears in vault file index",
+      "pass": true
+    },
+    {
+      "name": "Managed TXT visible as clickable file explorer entry",
+      "pass": true
+    },
+    {
+      "name": "File explorer click opens managed TXT in our reader",
+      "pass": true
+    },
+    {
+      "name": "Managed EPUB visible as clickable file explorer entry",
+      "pass": true
+    },
+    {
+      "name": "File explorer click opens EPUB in our existing reader",
+      "pass": true
+    }
+  ],
+  "measurements": [
+    {
+      "location": "floating",
+      "font": "14px",
+      "lineHeight": "21px",
+      "width": 378,
+      "height": 248,
+      "chapters": 3
+    },
+    {
+      "location": "dock",
+      "font": "16px",
+      "lineHeight": "24px",
+      "width": 429.5,
+      "height": 248,
+      "chapters": 3
+    },
+    {
+      "location": "sidebar",
+      "font": "18px",
+      "lineHeight": "27px",
+      "width": 432.5,
+      "height": 750,
+      "chapters": 3
+    },
+    {
+      "location": "tab",
+      "font": "21px",
+      "lineHeight": "31.5px",
+      "width": 665.3984375,
+      "height": 750,
+      "chapters": 3
+    }
+  ],
+  "restoredSource": "weread",
+  "restoredLocation": "tab",
+  "libraryEntriesRestored": true,
+  "originalBookProgressPreserved": true,
+  "normalPersistenceRestored": true,
+  "syntheticVaultCopiesCleaned": true
+}

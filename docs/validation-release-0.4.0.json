@@ -1,0 +1,25 @@
+{
+  "version": "0.4.0",
+  "pass": true,
+  "assets": [
+    {
+      "name": "main.js",
+      "installedMatchesProject": true,
+      "releaseMatchesProject": true
+    },
+    {
+      "name": "styles.css",
+      "installedMatchesProject": true,
+      "releaseMatchesProject": true
+    },
+    {
+      "name": "manifest.json",
+      "installedMatchesProject": true,
+      "releaseMatchesProject": true
+    }
+  ],
+  "zipContainsOnlyReleaseAssets": true,
+  "checksumEntries": 5,
+  "checksumsVerified": true,
+  "published": false
+}

@@ -1,0 +1,13 @@
+{
+  "version": "0.4.3",
+  "viewport": {
+    "width": 608,
+    "height": 750
+  },
+  "notes": 25,
+  "actions": 0,
+  "contentFont": "16px",
+  "contentLineHeight": "25.6px",
+  "closeButtons": 1,
+  "pass": true
+}

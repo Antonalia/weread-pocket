@@ -1,0 +1,29 @@
+{
+  "version": "0.4.2",
+  "source": "weread",
+  "location": "dock",
+  "chapterPreserved": true,
+  "paragraphPreserved": true,
+  "registeredCommands": [
+    {
+      "command": "scroll-up",
+      "registered": true,
+      "binding": "Ctrl + Alt + ↑"
+    },
+    {
+      "command": "scroll-down",
+      "registered": true,
+      "binding": "Ctrl + Alt + ↓"
+    },
+    {
+      "command": "previous-chapter",
+      "registered": true,
+      "binding": "Ctrl + Alt + Page Up"
+    },
+    {
+      "command": "next-chapter",
+      "registered": true,
+      "binding": "Ctrl + Alt + Page Down"
+    }
+  ]
+}
