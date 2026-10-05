@@ -234,6 +234,7 @@ assert.equal(JSON.stringify(legacyPocket.settings), legacyBefore, 'Reading a fal
   const flowRace = pocket();
   flowRace.ready = true;
   flowRace.syncNativeReaderPadding = async () => true;
+  flowRace.layout = () => {};flowRace.applyPocketDockHeight = () => {};flowRace.syncReadingSurface = () => {};
   const confirmation = deferred(), requested = deferred();
   let nativeFlow = 'scroll', confirmations = 0, reconciliations = 0, reconcileTask;
   flowRace.webview = {executeJavaScript:async script => {
@@ -241,9 +242,10 @@ assert.equal(JSON.stringify(legacyPocket.settings), legacyBefore, 'Reading a fal
       nativeFlow = script.includes('"paged"') ? 'paged' : 'scroll';
       return true;
     }
+    if(!script.includes('flow:document.querySelector')) return {ready:true};
     confirmations++;
     if(confirmations === 1) {requested.resolve(); return confirmation.promise;}
-    return nativeFlow;
+    return {flow:nativeFlow,font:{ready:true}};
   }};
   flowRace.applyAppearance = () => {
     reconciliations++;
@@ -255,7 +257,7 @@ assert.equal(JSON.stringify(legacyPocket.settings), legacyBefore, 'Reading a fal
   await requested.promise;
   flowRace.settings.literatureLocations.dock = true;
   flowRace.activateLayoutProfile();
-  confirmation.resolve('paged');
+  confirmation.resolve({flow:'paged',font:{ready:true}});
   assert.equal(await paged, true);
   assert.equal(reconciliations, 1, 'A late paged confirmation must reconcile the current card view');
   await reconcileTask;

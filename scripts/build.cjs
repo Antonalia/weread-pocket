@@ -44,19 +44,20 @@ function assemble() {
   let main = source.slice(0, start) + startMarker + bridge.trim() + ';\n' + source.slice(end);
   const localStart = uniqueIndex(main, '// WRP_LOCAL_BOOKS_START', 'Local book factories');
   const localEnd = uniqueIndex(main, '// WRP_LOCAL_BOOKS_END', 'Local book factories');
-  const reader = embedHelper(read('src/local-reader-surface.js'), 'local-publisher-typography.js', 'WRP_LOCAL_PUBLISHER', 'createLocalPublisherTypography');
-  const factories = ['local-book-store.js','local-reader-surface.js','local-books-integration.js'].map(file => {
+  let reader = embedHelper(read('src/local-reader-surface.js'), 'local-publisher-typography.js', 'WRP_LOCAL_PUBLISHER', 'createLocalPublisherTypography');
+  reader = embedHelper(reader,'local-image-info.js','WRP_LOCAL_IMAGE_INFO','getLocalImageDimensions');
+  const factories = ['local-book-store.js','local-reader-surface.js','local-book-search.js','local-books-integration.js'].map(file => {
     const helper = (file === 'local-reader-surface.js' ? reader : read('src/' + file)).trim();
     new vm.Script('(' + helper + ')', {filename:file});
-    const binding = {'local-book-store.js':'createLocalBookStore','local-reader-surface.js':'createLocalReaderSurface','local-books-integration.js':'installLocalBooks'}[file];
+    const binding = {'local-book-store.js':'createLocalBookStore','local-reader-surface.js':'createLocalReaderSurface','local-book-search.js':'createLocalBookSearch','local-books-integration.js':'installLocalBooks'}[file];
     return 'const ' + binding + ' = ' + helper + ';';
   }).join('\n');
-  main = main.slice(0,localStart) + '// WRP_LOCAL_BOOKS_START\n' + factories + '\nconst localBookTools = installLocalBooks(Pocket,{Modal,Setting,Notice,Menu,createLocalBookStore,createLocalReaderSurface,matchesHotkey,FONT_SIZES});\n' + main.slice(localEnd);
+  main = main.slice(0,localStart) + '// WRP_LOCAL_BOOKS_START\n' + factories + '\nconst localBookTools = installLocalBooks(Pocket,{Modal,Setting,Notice,Menu,createLocalBookStore,createLocalReaderSurface,createLocalBookSearch,matchesHotkey,FONT_SIZES});\n' + main.slice(localEnd);
   new vm.Script(main, {filename:'main.js'});
   const styleSource = read('styles.css');
   const styleStart = uniqueIndex(styleSource, '/* WRP_LOCAL_READER_STYLES_START */', 'Local reader styles');
   const styleEnd = uniqueIndex(styleSource, '/* WRP_LOCAL_READER_STYLES_END */', 'Local reader styles');
-  const styles = styleSource.slice(0,styleStart) + '/* WRP_LOCAL_READER_STYLES_START */\n' + read('src/local-reader.css').trim() + '\n' + styleSource.slice(styleEnd);
+  const styles = styleSource.slice(0,styleStart) + '/* WRP_LOCAL_READER_STYLES_START */\n' + read('src/local-reader.css').trim() + '\n' + read('src/local-book-tools.css').trim() + '\n' + styleSource.slice(styleEnd);
   return {bridge, reader, main, styles};
 }
 

@@ -27,7 +27,7 @@ function bindNativeReader() {
   // WRP_PAGED_INSETS_END
 
   const cache = new Map(), failures = new Map(), watches = [];
-  let layer = null, timer = null, enabled = true, lastDraw = null, disposed = false;
+  let layer = null, timer = null, enabled = true, lastDraw = null, disposed = false, pendingDraw = null, drawRevision = 0;
   // Reserve space before native collection: the original canvases, offsets,
   // selection and progress continue to describe the same Chinese text.
   let literature = { enabled:false, english:'', paragraphs:3, fontFamily:'sans-serif' }, literatureStyle = null;
@@ -56,12 +56,22 @@ function bindNativeReader() {
     node.style.setProperty(name, value, 'important');
   };
   const clear = () => { layer?.remove(); layer = null; cards = []; key = null; version = null; restore(); };
+  // Vue refs may be component instances or v-for arrays during a mode switch.
+  // Decorations work only with actual DOM elements from the current reader.
+  const domRef = value => {
+    if(Array.isArray(value)) { for(const item of value) { const node=domRef(item); if(node)return node; } return null; }
+    const node=value?.$el||value;
+    return node&&node.isConnected!==false&&typeof node.querySelectorAll==='function'&&typeof node.getBoundingClientRect==='function' ? node : null;
+  };
+  const find = (scope,selector) => domRef(typeof scope?.querySelector==='function' ? scope.querySelector(selector) : null);
+  const chapterDOM = () => domRef(reader.$refs.readerChapterContent);
   const quoteStyle = t => `margin:0;padding:0 0 0 8px;border-left:2px solid;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:${t.fontWeight};font-size:${t.fontSize};line-height:${t.lineHeight};font-family:${t.fontFamily};text-align:left;text-justify:none;letter-spacing:normal;word-spacing:0;`;
   const prepare = () => {
     clear();
     const config = getConfig();
     if(disposed || !config.enabled) return;
-    const root = reader.$refs.preRenderContainer, content = reader.$refs.preRenderContent;
+    const root = domRef(reader.$refs.preRenderContainer)||find(chapterDOM(),'.preRenderContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .preRenderContainer');
+    const content = find(root,'.preRenderContent')||domRef(reader.$refs.preRenderContent)||root;
     if(!root || !content || root.clientWidth < 60) return;
     const paragraphs = [...content.querySelectorAll('p')];
     const english = config.english.split(/\n\s*\n/).map(value => value.trim()).filter(Boolean);
@@ -111,7 +121,7 @@ function bindNativeReader() {
     } finally { measure.remove(); }
   };
   const draw = () => {
-    const target = reader.$refs.renderTargetContainer;
+    const target = domRef(reader.$refs.renderTargetContainer)||find(chapterDOM(),'.renderTargetContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .renderTargetContainer');
     if(disposed || reader._isDestroyed || !getConfig().enabled || !cards.length || key !== chapterKey() || version !== reader.renderContentsVersion || reader.chapterContentState !== 'DONE') { layer?.remove(); layer = null; return; }
     if(!target?.isConnected || (layer?.parentElement === target && layer.dataset.wrpVersion === String(version))) return;
     const next = element('div','wrp-literature-cards');
@@ -128,6 +138,8 @@ function bindNativeReader() {
       // native paragraph's 9px edge using the painted border, not a guess.
       const paintedBorder=parseFloat(getComputedStyle(box).borderLeftWidth)||1;
       const quoteInset=Math.max(0,9-paintedBorder);
+      const bottomBorder=parseFloat(getComputedStyle(box).borderBottomWidth)||1;
+      box.style.height=(card.height-(1-bottomBorder))+'px';
       const header = element('div','wrp-literature-card-header');
       const ui = `font-family:${card.typography.fontFamily};font-size:${card.typography.fontSize};font-weight:400;line-height:1.4;`;
       header.style.cssText = `position:absolute;left:0;right:0;top:0;height:${card.headerHeight}px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:1px solid var(--wrp-border);box-sizing:border-box;${ui}color:var(--wrp-text-muted);`;
@@ -151,10 +163,12 @@ function bindNativeReader() {
   // WRP_LITERATURE_LAYOUT_END
   const cardLayout = legacy ? createLiteratureCards({reader,chapterKey:()=>chapterKey(),getParagraphSpacing:()=>paragraphSpacing,getConfig:()=>literature}) : null;
   const collectWithCards = originalCollect && function() {
-    cardLayout?.prepare();
+    // Decoration failures must never abort the official text collector: its
+    // font API swallows errors and otherwise leaves the whole book PRERENDER.
+    try {cardLayout?.prepare();}catch{try{cardLayout?.clear();}catch{}}
     const key = chapterKey();
     return Promise.resolve(originalCollect.apply(this,arguments)).then(result=>{
-      if(!disposed) cardLayout?.collected(key,reader.renderContentsVersion);
+      if(!disposed) {try{cardLayout?.collected(key,reader.renderContentsVersion);}catch{try{cardLayout?.clear();}catch{}}}
       return result;
     });
   };
@@ -182,7 +196,7 @@ function bindNativeReader() {
   // WRP_UNDERLINE_INTERACTION_START
   const createUnderlineInteraction = function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled, requestReviews = null, eventDocument = document, environment = window }) {
   let disposed = false, marks = [], marksChapter = null, marksVersion = null, gesture = null, revision = 0, requestSerial = 0, cache = null;
-  let notesPanel = null, notesRoot = null, restoreNotesHide = null;
+  let notesPanel = null, notesRoot = null, restoreNotesHide = null, notesSerial = 0;
   const stopScrollPropagation = event => {
     if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     else event.stopPropagation?.();
@@ -205,6 +219,7 @@ function bindNativeReader() {
     notesPanel.scrollTop = event.key === 'Home' ? 0 : event.key === 'End' ? extent : Math.max(0, Math.min(extent, notesPanel.scrollTop + delta));
   };
   const releaseNotesScroll = () => {
+    notesSerial++;
     eventDocument.removeEventListener('wheel', notesWheel, true);
     eventDocument.removeEventListener('keydown', notesKey, true);
     notesPanel?.classList?.remove('wrp-notes-scroll-active');
@@ -242,11 +257,23 @@ function bindNativeReader() {
     if(cache?.key === requestKey) return cache.task;
     cache?.controller.abort();
     const controller = new environment.AbortController();
-    const entry = { key:requestKey, controller, task:null };
-    let timeout;
-    const deadline = new Promise((resolve, reject) => { timeout = environment.setTimeout(() => { controller.abort(); reject(new Error('Reading notes timeout')); }, 8000); });
-    const request = Promise.resolve().then(() => fetchReviews({ bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) }, controller.signal));
-    entry.task = Promise.race([request, deadline]).finally(() => environment.clearTimeout(timeout));
+    const entry = { key:requestKey, controller, task:null, settled:false };
+    const payload = { bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) };
+    let timeout, abort;
+    const cancelled = new Promise((resolve, reject) => {
+      abort = () => reject(new Error('Reading notes cancelled'));
+      controller.signal.addEventListener('abort', abort, {once:true});
+      timeout = environment.setTimeout(() => { controller.abort(); }, 8000);
+    });
+    const request = Promise.resolve().then(() => {
+      if(controller.signal.aborted) throw new Error('Reading notes cancelled');
+      return fetchReviews(payload, controller.signal);
+    });
+    entry.task = Promise.race([request, cancelled]).finally(() => {
+      entry.settled = true;
+      environment.clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', abort);
+    });
     cache = entry;
     entry.task.catch(() => { if(cache === entry) cache = null; });
     return entry.task;
@@ -268,23 +295,24 @@ function bindNativeReader() {
       if(!notes?.length) throw new Error('Native notes conversion unavailable');
       if(serial !== requestSerial || !active(key, version, token, range)) return false;
       releaseNotesScroll();
+      const presentation = ++notesSerial;
       reader.showReviewDetailPanel(notes);
       // The official personal-note panel renders Delete for every item. Public
       // thoughts use its original presentation with no mutation callback.
       if(typeof reader.$showReviewDetailPanel === 'function' && reader.$refs?.appContent) {
-        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{releaseNotesScroll();reader.clearHighLight?.();},onClickItem:null});
+        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{if(presentation===notesSerial){releaseNotesScroll();reader.clearHighLight?.();}},onClickItem:null});
       } else {
         const detail = Object.values(reader.$refs || {}).find(ref => ref?.$options?.name === 'ReaderReviewDetailPanel');
         if(detail) {
           detail.onClickItem = null;
           const originalHide = detail.onHide;
-          const hide = (...args) => {releaseNotesScroll();originalHide?.apply(detail,args);};
+          const hide = (...args) => {if(presentation===notesSerial){releaseNotesScroll();originalHide?.apply(detail,args);}};
           detail.onHide = hide;
           restoreNotesHide = () => {if(detail.onHide === hide) detail.onHide = originalHide;};
         }
       }
       if(typeof reader.$nextTick==='function') await reader.$nextTick();
-      if(active(key,version,token,range) && serial===requestSerial) {
+      if(!disposed && !reader._isDestroyed && presentation === notesSerial) {
         const panel=eventDocument.querySelector?.('.readerReviewDetailPanel_bg');
         if(panel) lockNotesScroll(panel);
         for(const actions of panel?.querySelectorAll('.readerReviewDetail_item > .actions') || []) actions.remove();
@@ -322,14 +350,19 @@ function bindNativeReader() {
   eventDocument.addEventListener('mousemove', move, true);
   eventDocument.addEventListener('click', click, true);
   eventDocument.addEventListener('pointercancel', cancel, true);
-  const clear = () => { releaseNotesScroll(); marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++; };
+  // Reflow invalidates canvas marks, not the lifetime of the visible native
+  // notes panel. Its hide callback owns the scroll lock until close/dispose.
+  const clear = () => {
+    marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++;
+    if(cache && !cache.settled) { cache.controller.abort(); cache = null; }
+  };
   return {
     openRange,
     setMarks(entries, key, version) { if(key !== marksChapter) clear(); marks = entries.filter(mark => mark?.element && rangeValue(mark.range)); marksChapter = key; marksVersion = version; },
     clear,
     dispose() {
       if(disposed) return;
-      disposed = true; clear(); cache?.controller.abort(); cache = null;
+      disposed = true; clear(); releaseNotesScroll(); cache?.controller.abort(); cache = null;
       eventDocument.removeEventListener('mousedown', down, true);
       eventDocument.removeEventListener('mousemove', move, true);
       eventDocument.removeEventListener('click', click, true);
@@ -341,77 +374,110 @@ function bindNativeReader() {
   const underlineInteraction = legacy ? createUnderlineInteraction({reader,store,chapterKey,isEnabled:()=>enabled&&!disposed}) : null;
   const schedule = () => {
     clearTimeout(timer);
-    if(!disposed) timer = setTimeout(() => { draw().catch(() => {}); }, 60);
+    if(!disposed) timer = setTimeout(() => { timer = null; draw().catch(() => {}); }, 60);
   };
-  const metadata = async (key, bookId, chapterUid) => {
-    if(cache.has(key)) return cache.get(key);
-    if(Date.now() - (failures.get(key) || 0) < 15000) return null;
-    const task = fetch(`/web/book/underlines?bookId=${encodeURIComponent(bookId)}&chapterUid=${encodeURIComponent(chapterUid)}`, { credentials: 'same-origin' })
-      .then(async response => {
-        if(!response.ok) throw new Error('Underline metadata unavailable');
-        const data = await response.json();
-        if(!Array.isArray(data.underlines)) throw new Error('Invalid underline metadata');
-        return data.underlines;
-      }).catch(() => { cache.delete(key); failures.set(key, Date.now()); return null; });
-    cache.set(key, task);
-    while(cache.size > 20) cache.delete(cache.keys().next().value);
-    return task;
-  };
-  const draw = async () => {
-    if(disposed || reader._isDestroyed || !legacy) return;
-    cardLayout?.draw();
-    if(!enabled) { layer?.remove(); layer = null; lastDraw = null; underlineInteraction?.clear(); return; }
-    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
-    const target = reader.$refs.renderTargetContainer;
-    const key = chapterKey();
-    if(!target || !key || !target.isConnected) return;
-    const version = reader.renderContentsVersion;
-    if(lastDraw === `${key}:${version}` && layer?.parentElement === target) return;
-    // Clear a previous chapter immediately, without moving or replacing text.
-    if(layer?.dataset.wrpChapter !== key) { layer?.remove(); layer = null; underlineInteraction?.clear(); }
-    const marks = await metadata(key, reader.bookId, reader.currentChapter.chapterUid);
-    if(!marks || disposed || !enabled || reader._isDestroyed || key !== chapterKey()) return;
-    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
-    if(target !== reader.$refs.renderTargetContainer || !target.isConnected) { schedule(); return; }
-    if(version !== reader.renderContentsVersion) { schedule(); return; }
-    const objects = reader.findObjsWithPoints({ x: -1e6, y: -1e6 }, { x: 1e6, y: 1e9 });
-    if(!objects.length) return;
-    const own = (reader.notesListInCurrentChapter || []).map(note => rangeOf(note.range)).filter(Boolean);
-    const next = document.createElement('div');
-    next.className = 'wrp-popular-underlines';
-    next.dataset.wrpChapter = key;
-    next.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;';
-    let ranges = 0;
-    const clickableMarks = [];
-    for(const mark of marks) {
-      const range = rangeOf(mark.range);
-      if(!range || range.end <= range.start) continue;
-      let drew = false;
-      for(const piece of subtract(range, own)) {
-        const selected = reader.findObjsInOffsetRange(objects, piece.start, piece.end);
-        for(const rect of reader.getRectsByContentObjs(selected)) {
-          if(![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) continue;
-          const line = document.createElement('div');
-          line.className = 'wrp-popular-underline';
-          line.style.cssText = `position:absolute;pointer-events:none;box-sizing:content-box;border-bottom:1px dashed #8c8c8e;left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;`;
-          next.appendChild(line);
-          clickableMarks.push({element:line,range});
-          drew = true;
-        }
-      }
-      if(drew) ranges++;
+  const cancelMetadata = exceptKey => {
+    for(const [key, entry] of cache) if(!entry.settled && key !== exceptKey) {
+      cache.delete(key); entry.controller.abort();
     }
-    next.dataset.wrpRanges = String(ranges);
-    next.dataset.wrpMarks = String(marks.length);
-    next.dataset.wrpRenderVersion = String(version);
-    layer?.remove();
-    target.appendChild(next);
-    layer = next;
-    underlineInteraction?.setMarks(clickableMarks,key,version);
-    lastDraw = `${key}:${version}`;
+  };
+  const metadata = (key, bookId, chapterUid) => {
+    if(cache.has(key)) return cache.get(key).task;
+    const now = Date.now();
+    for(const [failedKey, at] of failures) if(now - at >= 15000) failures.delete(failedKey);
+    if(failures.has(key)) return Promise.resolve(null);
+    const controller = new AbortController();
+    const entry = {task:null, controller, settled:false};
+    let timeout, abort;
+    const cancelled = new Promise((resolve, reject) => {
+      abort = () => { clearTimeout(timeout); reject(new Error('Underline metadata cancelled')); };
+      controller.signal.addEventListener('abort', abort, {once:true});
+      timeout = setTimeout(() => { controller.abort(); }, 8000);
+    });
+    const request = Promise.resolve().then(() => {
+      if(controller.signal.aborted) throw new Error('Underline metadata cancelled');
+      return fetch('/web/book/underlines?bookId=' + encodeURIComponent(bookId) + '&chapterUid=' + encodeURIComponent(chapterUid), {credentials:'same-origin', signal:controller.signal});
+    }).then(async response => {
+      if(!response.ok) throw new Error('Underline metadata unavailable');
+      const data = await response.json();
+      if(!Array.isArray(data.underlines)) throw new Error('Invalid underline metadata');
+      return data.underlines;
+    });
+    entry.task = Promise.race([request, cancelled]).catch(() => {
+      if(cache.get(key) === entry) cache.delete(key);
+      if(!disposed && !controller.signal.aborted) {
+        failures.delete(key); failures.set(key, Date.now());
+        while(failures.size > 20) failures.delete(failures.keys().next().value);
+      }
+      return null;
+    }).finally(() => {
+      entry.settled = true; clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', abort);
+    });
+    cache.set(key, entry);
+    while(cache.size > 20) {
+      const oldest = cache.keys().next().value, stale = cache.get(oldest);
+      cache.delete(oldest); if(!stale.settled) stale.controller.abort();
+    }
+    return entry.task;
+  };
+  const draw = () => {
+    if(disposed || reader._isDestroyed || !legacy || typographyBusy) return Promise.resolve();
+    cardLayout?.draw();
+    if(!enabled) {
+      layer?.remove(); layer = null; lastDraw = null; drawRevision++;
+      cancelMetadata(); underlineInteraction?.clear();
+      return Promise.resolve();
+    }
+    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return Promise.resolve();
+    const target = reader.$refs.renderTargetContainer, key = chapterKey(), version = reader.renderContentsVersion, generation = drawRevision;
+    if(!target || !key || !target.isConnected) return Promise.resolve();
+    const stamp = key + ':' + version + ':' + generation;
+    if(lastDraw === stamp && layer?.parentElement === target) return Promise.resolve();
+    if(pendingDraw?.stamp === stamp && pendingDraw.target === target) return pendingDraw.task;
+    // In-flight draws of one native version share both metadata and geometry.
+    // A chapter transition releases pending requests before replacing marks.
+    cancelMetadata(key);
+    if(layer?.dataset.wrpChapter !== key) { layer?.remove(); layer = null; underlineInteraction?.clear(); }
+    const entry = {stamp, target, task:null};
+    entry.task = (async () => {
+      const marks = await metadata(key, reader.bookId, reader.currentChapter.chapterUid);
+      if(!marks || disposed || !enabled || typographyBusy || reader._isDestroyed || generation !== drawRevision || key !== chapterKey()) return;
+      if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
+      if(target !== reader.$refs.renderTargetContainer || !target.isConnected || version !== reader.renderContentsVersion) { schedule(); return; }
+      if(lastDraw === stamp && layer?.parentElement === target) return;
+      const objects = reader.findObjsWithPoints({x:-1e6,y:-1e6}, {x:1e6,y:1e9});
+      if(!objects.length) return;
+      const own = (reader.notesListInCurrentChapter || []).map(note => rangeOf(note.range)).filter(Boolean);
+      const next = document.createElement('div');
+      next.className = 'wrp-popular-underlines'; next.dataset.wrpChapter = key;
+      next.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;';
+      let ranges = 0;
+      const clickableMarks = [];
+      for(const mark of marks) {
+        const range = rangeOf(mark.range);
+        if(!range || range.end <= range.start) continue;
+        let drew = false;
+        for(const piece of subtract(range, own)) {
+          const selected = reader.findObjsInOffsetRange(objects, piece.start, piece.end);
+          for(const rect of reader.getRectsByContentObjs(selected)) {
+            if(![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) continue;
+            const line = document.createElement('div'); line.className = 'wrp-popular-underline';
+            line.style.cssText = 'position:absolute;pointer-events:none;box-sizing:content-box;border-bottom:1px dashed #8c8c8e;left:' + rect.x + 'px;top:' + rect.y + 'px;width:' + rect.w + 'px;height:' + rect.h + 'px;';
+            next.appendChild(line); clickableMarks.push({element:line,range}); drew = true;
+          }
+        }
+        if(drew) ranges++;
+      }
+      next.dataset.wrpRanges = String(ranges); next.dataset.wrpMarks = String(marks.length); next.dataset.wrpRenderVersion = String(version);
+      layer?.remove(); target.appendChild(next); layer = next;
+      underlineInteraction?.setMarks(clickableMarks,key,version); lastDraw = stamp;
+    })().finally(() => { if(pendingDraw === entry) pendingDraw = null; });
+    pendingDraw = entry;
+    return entry.task;
   };
   const cleanup = () => {
-    disposed = true;
+    disposed = true; drawRevision++; pendingDraw = null; cancelMetadata(); cache.clear(); failures.clear();
     document.removeEventListener('keydown',nativeNavigationKey,true);
     if(window.__wrpGetNativeNavigationState===nativeNavigationState)delete window.__wrpGetNativeNavigationState;
     clearTimeout(timer);
@@ -430,7 +496,7 @@ function bindNativeReader() {
     watches.push(reader.$watch(() => reader.renderContentsVersion, schedule));
     watches.push(reader.$watch(() => reader.chapterContentState, schedule));
     watches.push(reader.$watch(() => chapterKey(), schedule));
-    watches.push(reader.$watch(() => reader.notesListInCurrentChapter, () => { lastDraw = null; schedule(); }, { deep: true }));
+    watches.push(reader.$watch(() => reader.notesListInCurrentChapter, () => { lastDraw = null; drawRevision++; schedule(); }, { deep: true }));
 
   }
   let navigationSequence=0, navigationAccepted=false, navigationPending=false, navigationResult=null, navigationError=null;
@@ -468,14 +534,14 @@ function bindNativeReader() {
   let fontStyle = null, lineStyle = null, paragraphStyle = null, lineHeight = 1.9, paragraphSpacing = 0;
   let restoreFontPx = null, restoreLineHeight = null, fontPreferenceSeen = false, linePreferenceSeen = false;
   let restoreParagraphSpacing = null, paragraphPreferenceSeen = false, preferenceKey = null;
-  let contentWidth = null, pendingReflow = false;
+  let contentWidth = null, pendingReflow = false, typographyBusy = false;
   const validLineHeight = value => typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 3;
   const validParagraphSpacing = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 80;
   const fontState = () => {
     if(disposed || reader._isDestroyed || typeof reader.changeFontSize !== 'function') return null;
     const level = Number(reader.fontSizeLevel);
     const custom = Number(fontStyle?.dataset.wrpFontSize);
-    return { level, size: level === 1 && smallFontSizes.includes(custom) ? custom : nativeFontSizes[level - 1], lineHeight, paragraphSpacing, preferenceKey, count: nativeFontSizes.length, ready: reader.chapterContentState === 'DONE' };
+    return { level, size: level === 1 && smallFontSizes.includes(custom) ? custom : nativeFontSizes[level - 1], lineHeight, paragraphSpacing, preferenceKey, count: nativeFontSizes.length, ready: !typographyBusy && reader.chapterContentState === 'DONE' };
   };
   const applyFontOverride = size => {
     if(!smallFontSizes.includes(size)) { fontStyle?.remove(); fontStyle = null; return; }
@@ -519,25 +585,31 @@ function bindNativeReader() {
     const previousOverride = Number(fontStyle?.dataset.wrpFontSize);
     const previousLineHeight = lineHeight, previousLineApplied = !!lineStyle;
     const previousParagraphSpacing = paragraphSpacing, previousParagraphApplied = !!paragraphStyle;
-    if(spacing != null) applyLineHeight(spacing);
-    if(paragraphs != null) applyParagraphSpacing(paragraphs);
-    applyFontOverride(size);
-    layer?.remove(); layer = null; lastDraw = null;
-    underlineInteraction?.clear();
-    try { await Promise.resolve(reader.changeFontSize(level)); }
-    catch {
-      if(disposed || reader._isDestroyed) return false;
-      lineHeight = previousLineHeight;
-      if(previousLineApplied) applyLineHeight(previousLineHeight);
-      else { lineStyle?.remove(); lineStyle = null; }
-      paragraphSpacing = previousParagraphSpacing;
-      if(previousParagraphApplied) applyParagraphSpacing(previousParagraphSpacing);
-      else { paragraphStyle?.remove(); paragraphStyle = null; }
-      applyFontOverride(previousOverride);
-      try { await Promise.resolve(reader.changeFontSize(before.level)); } catch { /* Keep the last font preference for recovery. */ }
-      return false;
+    typographyBusy = true;
+    try {
+      if(spacing != null) applyLineHeight(spacing);
+      if(paragraphs != null) applyParagraphSpacing(paragraphs);
+      applyFontOverride(size);
+      layer?.remove(); layer = null; lastDraw = null; drawRevision++;
+      underlineInteraction?.clear();
+      try { await Promise.resolve(reader.changeFontSize(level)); }
+      catch {
+        if(disposed || reader._isDestroyed) return false;
+        lineHeight = previousLineHeight;
+        if(previousLineApplied) applyLineHeight(previousLineHeight);
+        else { lineStyle?.remove(); lineStyle = null; }
+        paragraphSpacing = previousParagraphSpacing;
+        if(previousParagraphApplied) applyParagraphSpacing(previousParagraphSpacing);
+        else { paragraphStyle?.remove(); paragraphStyle = null; }
+        applyFontOverride(previousOverride);
+        try { await Promise.resolve(reader.changeFontSize(before.level)); } catch { /* Keep the last font preference for recovery. */ }
+        return false;
+      }
+      return !disposed && !reader._isDestroyed;
+    } finally {
+      typographyBusy = false;
+      if(!disposed && !reader._isDestroyed) { restoreTypography(); if(!typographyBusy && reader.chapterContentState === 'DONE') schedule(); }
     }
-    return !disposed && !reader._isDestroyed;
   };
   window.__wrpSetFontSize = size => {
     const before = fontState();
@@ -558,7 +630,7 @@ function bindNativeReader() {
     return setTypography(before.size, null, false, value);
   };
   const restoreTypography = () => {
-    if((restoreFontPx == null && restoreLineHeight == null && restoreParagraphSpacing == null && !pendingReflow) || reader.chapterContentState !== 'DONE' || disposed) return;
+    if((restoreFontPx == null && restoreLineHeight == null && restoreParagraphSpacing == null && !pendingReflow) || reader.chapterContentState !== 'DONE' || disposed || typographyBusy) return;
     const size = restoreFontPx ?? fontState()?.size, spacing = restoreLineHeight, force = pendingReflow, paragraphs = restoreParagraphSpacing;
     restoreFontPx = null; restoreLineHeight = null; restoreParagraphSpacing = null; pendingReflow = false;
     const requestedKey = preferenceKey;
@@ -600,7 +672,7 @@ function bindNativeReader() {
     if(desiredTheme && !disposed && store.state.isWhiteTheme !== (desiredTheme === 'light')) window.__wrpApplyNativeTheme(desiredTheme).catch(() => {});
   }));
   window.__wrpSetReadingFlow = flow => {
-    if(reader._isDestroyed || !union || typeof union.handleSwitchMode !== 'function') return false;
+    if(disposed || reader._isDestroyed || !union || typeof union.handleSwitchMode !== 'function' || !['continuous','scroll','paged'].includes(flow) || typographyBusy || (reader.chapterContentState != null && reader.chapterContentState !== 'DONE')) return false;
     const horizontal = !!document.querySelector('.wr_horizontalReader');
     if(horizontal !== (flow === 'paged')) union.handleSwitchMode(flow === 'paged');
     return true;
@@ -631,7 +703,7 @@ function bindNativeReader() {
     }
     restoreTypography();
     if(legacy) {
-      if(enabled !== showPopular) lastDraw = null;
+      if(enabled !== !!showPopular) { lastDraw = null; drawRevision++; if(!showPopular) cancelMetadata(); }
       enabled = !!showPopular;
       schedule();
       return true;

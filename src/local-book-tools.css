@@ -1,0 +1,21 @@
+.wrp-local-tools-modal { width:min(640px, calc(100vw - 32px)); min-width:0; max-width:calc(100vw - 32px); }
+.wrp-local-tools { display:flex; flex-direction:column; gap:10px; min-width:0; max-height:75vh; padding:4px 8px; }
+.wrp-local-tools h2 { margin:0; padding:0; font-size:var(--font-ui-large,18px); line-height:1.4; overflow-wrap:anywhere; }
+.wrp-local-tools-book, .wrp-local-tools-status { margin:0; padding:0; color:var(--text-muted); font-size:var(--font-ui-small,12px); line-height:1.5; overflow-wrap:anywhere; }
+.wrp-local-tools-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; margin:0; }
+.wrp-local-tools-controls input { flex:1 1 160px; min-width:0; max-width:100%; height:32px; margin:0; padding:4px 8px; }
+.wrp-local-tools button { flex:none; min-height:28px; height:auto; max-width:100%; margin:0; padding:4px 9px; white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
+.wrp-local-tools button[hidden] { display:none; }
+.wrp-local-tools-list { display:flex; flex-direction:column; flex:1; gap:6px; min-width:0; min-height:80px; max-height:55vh; margin:0; padding:2px; overflow:auto; overscroll-behavior:contain; }
+.wrp-local-tool-row { display:flex; align-items:center; gap:8px; min-width:0; padding:6px; border:1px solid var(--background-modifier-border); border-radius:5px; }
+.wrp-local-tool-row .wrp-local-tool-jump { display:flex; flex-direction:column; flex:1; align-items:flex-start; gap:4px; min-width:0; height:auto; padding:4px; border:0; background:transparent; box-shadow:none; color:var(--text-normal); text-align:start; }
+.wrp-local-tool-jump:hover { background:var(--background-modifier-hover); }
+.wrp-local-tool-meta { color:var(--text-muted); font-size:var(--font-ui-small,12px); line-height:1.5; }
+.wrp-local-tool-excerpt { font-size:var(--font-ui-medium,14px); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; text-align:start; }
+.wrp-local-tool-excerpt mark { background:var(--text-highlight-bg); color:inherit; }
+.wrp-local-tool-empty { margin:8px; padding:0; font-size:var(--font-ui-small,12px); color:var(--text-muted); line-height:1.5; }
+@media (max-width:420px) {
+  .wrp-local-tools { padding-inline:4px; }
+  .wrp-local-tools-controls input { flex-basis:100%; }
+  .wrp-local-tool-row { gap:4px; padding:4px; }
+}

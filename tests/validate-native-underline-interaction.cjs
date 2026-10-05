@@ -133,10 +133,43 @@ function scrollEvent(extra={}) {
  s.interaction.dispose();checks++;
  s=nativePanelFixture();const originalHide=s.detail.onHide;await openFixture(s);const boundHide=s.detail.onHide;assert.notEqual(boundHide,originalHide);
  s.reader.hideReviewDetailPanel();assert.equal(s.nativeHides,1);assert.equal(s.detail.onHide,originalHide,'Native hide callback must be restored after closing');assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));assert(!s.panel.classList.contains('wrp-notes-scroll-active'));assert.equal(s.listeners.size,4);assert(!s.listeners.has('wheel'));assert(!s.listeners.has('keydown'));s.interaction.dispose();checks++;
- for(const cleanup of ['clear','dispose']){
-  s=nativePanelFixture();const hide=s.detail.onHide;await openFixture(s);s.interaction[cleanup]();assert(!s.doc.documentElement.classList.contains('wrp-notes-open'),cleanup);assert(!s.panel.classList.contains('wrp-notes-scroll-active'),cleanup);assert.equal(s.detail.onHide,hide,cleanup);assert(!s.listeners.has('wheel'));assert(!s.listeners.has('keydown'));assert.equal(s.listeners.size,cleanup==='clear'?4:0);s.interaction.dispose();checks++;
+ s=await openFixture(nativePanelFixture());
+ const reflowHide=s.detail.onHide, reflowWheel=s.listeners.get('wheel'), reflowKey=s.listeners.get('keydown');
+ for(const change of ['marks-cleared','render-version','underlines-disabled','marks-redrawn']) {
+  if(change==='marks-cleared') s.interaction.clear();
+  if(change==='render-version') {s.reader.renderContentsVersion++;s.interaction.clear();}
+  if(change==='underlines-disabled') {s.setEnabled(false);s.interaction.clear();}
+  if(change==='marks-redrawn') s.interaction.setMarks([{element:s.element,range:{start:10,end:21}}],'book:chapter',s.reader.renderContentsVersion);
+  assert(s.doc.documentElement.classList.contains('wrp-notes-open'),change+' keeps the native note scroll lock');
+  assert(s.panel.classList.contains('wrp-notes-scroll-active'));assert.equal(s.detail.onHide,reflowHide);
+  assert.equal(s.listeners.get('wheel'),reflowWheel);assert.equal(s.listeners.get('keydown'),reflowKey);
+  const outside=scrollEvent({target:{insideNotes:false}});reflowWheel(outside);assert(outside.prevented&&outside.stopped);
+  checks++;
+ }
+ s.reader.hideReviewDetailPanel();assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));assert.equal(s.listeners.size,4);s.interaction.dispose();checks++;
+ s=nativePanelFixture();const hideBeforeDispose=s.detail.onHide;await openFixture(s);s.interaction.dispose();
+ assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));assert(!s.panel.classList.contains('wrp-notes-scroll-active'));assert.equal(s.detail.onHide,hideBeforeDispose);assert.equal(s.listeners.size,0);checks++;
+ for(const cancel of ['clear','dispose']) {
+  s=setup();const cancelled=s.interaction.openRange({start:10,end:21});await flush();s.interaction[cancel]();
+  assert.equal(await cancelled,false,'Invalidation settles even a provider which ignores AbortSignal');
+  assert(s.requests[0].signal.aborted);assert.equal(s.messages.length,0);assert.equal(s.panels.length,0);s.interaction.dispose();checks++;
  }
  s=nativePanelFixture();const stableOriginalHide=s.detail.onHide;await openFixture(s);const firstWheel=s.listeners.get('wheel'),firstKey=s.listeners.get('keydown');await s.interaction.openRange({start:10,end:21});await s.interaction.openRange({start:10,end:21});assert.equal(s.listeners.size,6);assert.equal(s.listeners.get('wheel'),firstWheel);assert.equal(s.listeners.get('keydown'),firstKey);assert.equal(s.closeButtons.length,1);s.detail.onHide();assert.equal(s.nativeHides,1,'Repeated opens must not stack native hide wrappers');assert.equal(s.detail.onHide,stableOriginalHide);assert.equal(s.listeners.size,4);assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));s.interaction.dispose();checks++;
  s=nativePanelFixture();delete s.reader.$refs.publicDetail;const globalShows=[];s.reader.$refs.appContent={};s.reader.$showReviewDetailPanel=options=>{globalShows.push(options);s.detail.onClickItem=options.onClickItem;s.detail.onHide=options.onHide;};s.reader.clearHighLight=()=>{s.highlightsCleared=(s.highlightsCleared||0)+1;};await openFixture(s);assert(s.doc.documentElement.classList.contains('wrp-notes-open'));globalShows[0].onHide();assert.equal(s.highlightsCleared,1);assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));assert(!s.panel.classList.contains('wrp-notes-scroll-active'));assert.equal(s.listeners.size,4);s.interaction.dispose();checks++;
+ for(const transition of ['reflow','close','dispose']) {
+  s=nativePanelFixture();const tick=deferred();s.reader.$nextTick=()=>tick.promise;
+  const showing=s.interaction.openRange({start:10,end:21});await flush();s.requests[0].resolve({pageReviews:reviews});await flush();
+  assert.equal(s.panels.length,1,'Native presentation precedes its DOM flush');
+  if(transition==='reflow'){s.reader.renderContentsVersion++;s.interaction.clear();}
+  if(transition==='close')s.reader.hideReviewDetailPanel();
+  if(transition==='dispose')s.interaction.dispose();
+  tick.resolve();await showing;
+  assert.equal(s.doc.documentElement.classList.contains('wrp-notes-open'),transition==='reflow','Presentation lifetime survives reflow while close/dispose wins over a late DOM flush');
+  s.interaction.dispose();checks++;
+ }
+ s=await openFixture(nativePanelFixture());const obsoleteHide=s.detail.onHide;
+ await s.interaction.openRange({start:10,end:21});obsoleteHide();
+ assert(s.doc.documentElement.classList.contains('wrp-notes-open'),'A late hide from the previous presentation must not unlock newly opened notes');
+ assert.equal(s.nativeHides||0,0);s.reader.hideReviewDetailPanel();assert.equal(s.nativeHides,1);assert(!s.doc.documentElement.classList.contains('wrp-notes-open'));s.interaction.dispose();checks++;
  console.log(`PASS ${checks} native underline interaction checks`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

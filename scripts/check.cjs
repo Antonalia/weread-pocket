@@ -45,7 +45,7 @@ function metadata() {
 }
 
 function source() {
-  const files = ['src/main.js','src/native-reader-bridge.js','src/native-underline-interaction.js','src/create-literature-cards.js','src/local-book-store.js','src/local-reader-surface.js','src/local-publisher-typography.js','src/local-books-integration.js','main.js','tests/local-reader-continuous-browser.js','tests/local-reader-continuous-edges-browser.js','tests/local-reader-startup-browser.js','tests/local-reader-indent-browser.js','tests/local-reader-publisher-browser.js','tests/local-reader-navigation-browser.js'];
+  const files = ['src/main.js','src/native-reader-bridge.js','src/native-underline-interaction.js','src/create-literature-cards.js','src/local-book-store.js','src/local-reader-surface.js','src/local-publisher-typography.js','src/local-books-integration.js','src/local-image-info.js','src/local-book-search.js','main.js','tests/local-reader-continuous-browser.js','tests/local-reader-continuous-edges-browser.js','tests/local-reader-startup-browser.js','tests/local-reader-indent-browser.js','tests/local-reader-publisher-browser.js','tests/local-reader-navigation-browser.js'];
   for (const file of files) {
     const value = read(file);
     new vm.Script(value, {filename:file});

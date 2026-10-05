@@ -11,8 +11,8 @@ class Element {
   remove() { if(this.parentElement) this.parentElement.children=this.parentElement.children.filter(x=>x!==this); this.parentElement=null; this.isConnected=false; }
 }
 function harness({ own=[], horizontal=false, font=false, theme=false, white=true, collect=false }={}) {
-  const listeners={},tasks = new Map(), watches=[], once={}, requests=[], geometryCalls=[], rangeCalls=[], modeChanges=[];
-  let timerId=0, themeTicks=0, bodyWhite=white, bodyLiterature=false; const themeChanges=[];
+  const listeners={},tasks = new Map(), delays = new Map(), watches=[], once={}, requests=[], geometryCalls=[], rangeCalls=[], modeChanges=[];
+  let timerId=0, clock=100000, themeTicks=0, bodyWhite=white, bodyLiterature=false; const themeChanges=[];
   const target = new Element('div');
   const head = new Element('head'), fontChanges=[]; let fontWait=null;
   const objects = Array.from({length:12},(_,offset)=>({ offset, getOffset:()=>offset, getTextLength:()=>1, rect:{x:17+offset*7,y:83,w:7,h:19} }));
@@ -49,10 +49,10 @@ function harness({ own=[], horizontal=false, font=false, theme=false, white=true
   if(collect) reader.collectPreRenderInfos=()=>Promise.resolve('native-collected');
   const window = { innerWidth:800, dispatchEvent:()=>{throw new Error('Legacy overlay must not mutate native padding');} };
   const document = {addEventListener(type,fn){(listeners[type]||=[]).push(fn);},removeEventListener(type,fn){listeners[type]=(listeners[type]||[]).filter(value=>value!==fn);}, body:{classList:{contains:name=>name==='wr_whiteTheme'?bodyWhite:bodyLiterature,toggle:(name,value)=>{bodyLiterature=!!value;},remove:()=>{bodyLiterature=false;}}}, head, documentElement:head, createElement:tag=>new Element(tag), querySelector:selector=>selector==='.wr_horizontalReader'&&horizontal?new Element('div'):null };
-  const context = vm.createContext({ window, document, fetch:(url,options)=>{const wait=deferred(); requests.push({url,options,wait}); return wait.promise;}, setTimeout:fn=>{const id=++timerId;tasks.set(id,fn);return id;}, clearTimeout:id=>tasks.delete(id), console, Event:class Event{constructor(type){this.type=type;}}, __reader:reader });
+  const context = vm.createContext({ window, document, fetch:(url,options)=>{const wait=deferred(); requests.push({url,options,wait}); return wait.promise;}, setTimeout:(fn,delay=0)=>{const id=++timerId;tasks.set(id,fn);delays.set(id,delay);return id;}, clearTimeout:id=>{tasks.delete(id);delays.delete(id);}, AbortController, Date:{now:()=>clock}, console, Event:class Event{constructor(type){this.type=type;}}, __reader:reader });
   vm.runInContext(source+'\n__bound = bindNativeReader.call(__reader);',context,{timeout:1000});
   assert.equal(context.__bound,true);
-  const runTimers=async()=>{ const pending=[...tasks.values()];tasks.clear();for(const callback of pending)callback();await flush(); };
+  const runTimers=async(maxDelay=60)=>{const pending=[...tasks].filter(([id])=>(delays.get(id)||0)<=maxDelay);for(const [id,callback] of pending){tasks.delete(id);delays.delete(id);callback();}await flush();};
   const resolveRequest=async(index,marks)=>{requests[index].wait.resolve({ok:true,json:async()=>({underlines:marks})});await flush();};
   const fire=(index)=>{assert.ok(watches[index].active);watches[index].callback();};
   const completeFont=async()=>{
@@ -61,7 +61,7 @@ function harness({ own=[], horizontal=false, font=false, theme=false, white=true
     for(const watch of watches) if(watch.active) watch.callback();
     pending.resolve(); await flush();
   };
-  return {context,window,reader,target,head,listeners,fontChanges,completeFont,tasks,watches,requests,geometryCalls,rangeCalls,modeChanges,once,runTimers,resolveRequest,fire,store,themeChanges,get themeTicks(){return themeTicks;},setNativeTheme:(white,syncBody=true)=>{store.state.isWhiteTheme=white;if(syncBody)bodyWhite=white;}};
+  return {context,window,reader,target,head,listeners,fontChanges,completeFont,tasks,watches,requests,geometryCalls,rangeCalls,modeChanges,once,runTimers,resolveRequest,fire,store,themeChanges,advanceClock:value=>{clock+=value;},get themeTicks(){return themeTicks;},setNativeTheme:(white,syncBody=true)=>{store.state.isWhiteTheme=white;if(syncBody)bodyWhite=white;}};
 }
 const checks=[];
 async function check(name,fn) { try { await fn(); checks.push({name,pass:true}); } catch(error) { checks.push({name,pass:false,error:error.message}); } }
@@ -230,7 +230,7 @@ async function check(name,fn) { try { await fn(); checks.push({name,pass:true});
   });
   await check('Cleanup removes timers, watchers and DOM, including late replies',async()=>{
     const h=harness();h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();await h.resolveRequest(0,[{range:'2-4',type:0}]);
-    h.reader.currentChapter={chapterUid:2};h.fire(2);await h.runTimers();assert.equal(h.requests.length,2);h.fire(0);assert.equal(h.tasks.size,1);
+    h.reader.currentChapter={chapterUid:2};h.fire(2);await h.runTimers();assert.equal(h.requests.length,2);h.fire(0);assert.equal(h.tasks.size,2,'A queued draw and one request deadline remain');
     h.once['hook:beforeDestroy']();assert.ok(h.watches.every(w=>!w.active));assert.equal(h.tasks.size,0);assert.equal(h.target.children.length,0);
     await h.resolveRequest(1,[{range:'6-7',type:0}]);assert.equal(h.target.children.length,0);assert.equal(h.window.__wrpApplyNativePadding(48,false,true),false);
   });
@@ -425,6 +425,86 @@ async function check(name,fn) { try { await fn(); checks.push({name,pass:true});
     const h=harness({font:true});let changing=h.window.__wrpSetParagraphSpacing(8);await h.completeFont();assert.equal(await changing,true);
     const original=h.reader.changeFontSize;let attempts=0;h.reader.changeFontSize=level=>{if(++attempts===1)throw new Error('Paragraph collection failed');return original(level);};
     changing=h.window.__wrpSetParagraphSpacing(20);assert.equal(h.fontChanges.at(-1).paragraphSpacing,8);await h.completeFont();assert.equal(await changing,false);assert.equal(h.window.__wrpGetFontState().paragraphSpacing,8);
+  });
+  await check('Repeated draws pending on one render version perform native geometry once',async()=>{
+    const h=harness();
+    for(let i=0;i<25;i++){h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();}
+    assert.equal(h.requests.length,1);assert.equal(h.geometryCalls.length,0);
+    await h.resolveRequest(0,[{range:'2-4',type:0}]);
+    assert.equal(h.geometryCalls.length,1,'Metadata coalescing also coalesces native geometry and DOM work');
+    assert.equal(h.target.children.length,1);assert.equal(h.tasks.size,0,'A successful request clears its deadline');
+    h.once['hook:beforeDestroy']();
+  });
+  await check('Chapter replacement, disabling and disposal abort ignored metadata requests promptly',async()=>{
+    for(const change of ['chapter','disabled','dispose']) {
+      const h=harness();h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();
+      const old=h.requests[0];assert.equal(old.options.signal.aborted,false);
+      if(change==='chapter'){h.reader.currentChapter={chapterUid:2};h.fire(2);await h.runTimers();assert.equal(h.requests.length,2);}
+      if(change==='disabled'){h.window.__wrpApplyNativePadding(48,false,false);await h.runTimers();}
+      if(change==='dispose'){h.once['hook:beforeDestroy']();await flush();}
+      assert.equal(old.options.signal.aborted,true,change+' cancels pending fetch even when it never acknowledges abort');
+      assert.equal(h.target.children.length,0);
+      if(change!=='chapter')assert.equal(h.tasks.size,0,'Cancellation clears deadline without waiting for an ignored request');
+      h.once['hook:beforeDestroy']();
+    }
+  });
+  await check('A timed out metadata request settles, clears its deadline and permits retry',async()=>{
+    const h=harness();h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();
+    await h.runTimers(8000);assert.equal(h.requests[0].options.signal.aborted,true);assert.equal(h.target.children.length,0);assert.equal(h.tasks.size,0);
+    h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();assert.equal(h.requests.length,2,'Timeout does not leave a permanently pending metadata cache');
+    await h.resolveRequest(1,[{range:'2-4',type:0}]);assert.equal(h.geometryCalls.length,1);h.once['hook:beforeDestroy']();
+  });
+  await check('Metadata failure cooldown is time limited and retained for at most 20 chapters',async()=>{
+    const h=harness();
+    for(let chapter=1;chapter<=25;chapter++) {
+      h.reader.currentChapter={chapterUid:chapter};h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();
+      h.requests.at(-1).wait.reject(new Error('Network unavailable'));await flush();
+    }
+    assert.equal(h.requests.length,25);
+    h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();assert.equal(h.requests.length,25,'Latest failure observes cooldown');
+    h.reader.currentChapter={chapterUid:1};h.fire(2);await h.runTimers();assert.equal(h.requests.length,26,'Old failures are evicted rather than retained for every chapter');
+    h.requests.at(-1).wait.reject(new Error('Network unavailable'));await flush();
+    h.reader.currentChapter={chapterUid:25};h.advanceClock(15001);h.fire(2);await h.runTimers();assert.equal(h.requests.length,27,'Expired failures permit a fresh request');h.once['hook:beforeDestroy']();await flush();
+  });
+  await check('A synchronous DONE watcher cannot overlap an unfinished native collection',async()=>{
+    const h=harness({font:true,collect:true}),pending=[];
+    h.reader.changeFontSize=level=>{const wait=deferred();pending.push({level,wait});h.reader.fontSizeLevel=level;return wait.promise;};
+    const first=h.window.__wrpSetFontSize(12);assert.equal(pending.length,1);assert.equal(h.window.__wrpGetFontState().ready,false);
+    h.window.__wrpSetLiteratureAppearance({enabled:true,english:'Queued card quote'},true);
+    h.window.__wrpApplyNativePadding(16,true,false,16,1.4,6,'latest-profile');
+    for(const watch of h.watches)if(watch.active)watch.callback();
+    assert.equal(pending.length,1,'Pending native Promise prevents a second collection even if state remains DONE');
+    assert.equal(h.window.__wrpSetReadingFlow('paged'),false,'Flow cannot destroy a reader during collection');
+    pending[0].wait.resolve();assert.equal(await first,true);await flush();
+    assert.equal(pending.length,2,'Latest queued card/profile is recollected after the first task settles');
+    pending[1].wait.resolve();await flush();
+    const state=h.window.__wrpGetFontState();assert.equal(state.ready,true);assert.equal(state.size,16);assert.equal(state.lineHeight,1.4);assert.equal(state.paragraphSpacing,6);
+    assert.equal(h.window.__wrpSetReadingFlow('paged'),true);assert.deepEqual(h.modeChanges,[true]);h.once['hook:beforeDestroy']();
+    assert.equal(h.window.__wrpSetReadingFlow('paged'),false,'Disposed bridge cannot switch modes through a stale function');
+  });
+  await check('Underline drawing waits for an unfinished native Promise even if state remains DONE',async()=>{
+    const h=harness({font:true}),collect=deferred();
+    h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();assert.equal(h.requests.length,1);
+    h.reader.changeFontSize=()=>collect.promise;
+    const changing=h.window.__wrpSetFontSize(14);assert.equal(h.reader.chapterContentState,'DONE');
+    await h.resolveRequest(0,[{range:'2-4',type:0}]);assert.equal(h.geometryCalls.length,0,'Metadata reply cannot use geometry from an unfinished typography collection');
+    h.window.__wrpApplyNativePadding(48,false,true);await h.runTimers();assert.equal(h.geometryCalls.length,0,'Repeated appearance update cannot bypass the busy guard');
+    collect.resolve();assert.equal(await changing,true);await h.runTimers();
+    assert.equal(h.geometryCalls.length,1,'Promise completion reschedules the deferred draw without another state watcher');
+    assert.equal(h.requests.length,1,'Completed draw uses the same cached metadata');assert.equal(h.target.children.length,1);h.once['hook:beforeDestroy']();
+  });
+  await check('Card preparation and collection errors never prevent the original native text collector from completing',async()=>{
+    for(const stage of ['prepare','collected']) {
+      const h=harness({collect:true}),native=h.reader.collectPreRenderInfos;
+      h.window.__wrpSetLiteratureAppearance({enabled:true,english:'A quote.',paragraphs:3},true);
+      if(stage==='prepare') {
+        const content={isConnected:true,querySelectorAll:()=>[{style:{}}],getBoundingClientRect:()=>({width:400})};
+        h.reader.$refs.preRenderContainer={isConnected:true,clientWidth:400,querySelectorAll:()=>[],querySelector:()=>content,getBoundingClientRect(){throw new Error('Transient native DOM geometry failure');}};
+        h.reader.$refs.preRenderContent={$el:content};
+      } else Object.defineProperty(h.reader,'renderContentsVersion',{get(){throw new Error('Transient native render-version getter failure');},configurable:true});
+      assert.equal(await native.call(h.reader),'native-collected',stage+' decoration error must preserve official native collection result');
+      h.once['hook:beforeDestroy']();assert.equal(h.head.children.length,0);
+    }
   });
   await check('Embedded production bridge exactly matches validated standalone bridge',async()=>{
     const main=fs.readFileSync(__dirname+'/../main.js','utf8');

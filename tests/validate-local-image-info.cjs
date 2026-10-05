@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const dimensions=vm.runInThisContext('('+fs.readFileSync('src/local-image-info.js','utf8')+')');
+const png=(w,h)=>{const data=Buffer.alloc(24);data.writeUInt32BE(0x89504e47);data.write('IHDR',12);data.writeUInt32BE(w,16);data.writeUInt32BE(h,20);return data;};
+assert.deepEqual(dimensions(png(120,60),'image/png'),{width:120,height:60});
+assert.deepEqual(dimensions(png(100000,100000),'image/png'),{width:100000,height:100000},'dimensions must expose compressed image bombs before decoding');
+assert.equal(dimensions(png(0,60),'image/png'),null);
+const gif=Buffer.alloc(12);gif.write('GIF89a');gif.writeUInt16LE(320,6);gif.writeUInt16LE(180,8);assert.deepEqual(dimensions(gif,'image/gif'),{width:320,height:180});
+const jpeg=Buffer.from([255,216,255,224,0,4,0,0,255,194,0,7,8,0,60,0,120]);assert.deepEqual(dimensions(jpeg,'image/jpeg'),{width:120,height:60});
+assert.equal(dimensions(jpeg.subarray(0,-1),'image/jpeg'),null);jpeg[4]=255;assert.equal(dimensions(jpeg,'image/jpeg'),null,'malformed marker lengths cannot read beyond payload');
+const webp=Buffer.alloc(30);webp.write('RIFF');webp.write('WEBP',8);webp.write('VP8X',12);webp.writeUInt32LE(10,16);webp[24]=119;webp[27]=59;assert.deepEqual(dimensions(webp,'image/webp'),{width:120,height:60});
+const bmp=Buffer.alloc(54);bmp.write('BM');bmp.writeUInt32LE(40,14);bmp.writeInt32LE(120,18);bmp.writeInt32LE(-60,22);assert.deepEqual(dimensions(bmp,'image/bmp'),{width:120,height:60});
+const avif=Buffer.alloc(44);avif.writeUInt32BE(24);avif.write('ftyp',4);avif.write('avif',8);avif.writeUInt32BE(20,24);avif.write('ispe',28);avif.writeUInt32BE(120,36);avif.writeUInt32BE(60,40);assert.deepEqual(dimensions(avif,'image/avif'),{width:120,height:60});
+assert.equal(dimensions(Buffer.alloc(100),'image/png'),null);assert.equal(dimensions('<svg/>','image/svg+xml'),null);
+const padded=Buffer.concat([Buffer.alloc(7),png(24,12),Buffer.alloc(5)]);assert.deepEqual(dimensions(padded.subarray(7,-5),'image/png'),{width:24,height:12},'TypedArray offset and length are respected');
+console.log('PASS local image header dimensions, malformed assets, pixel-bomb visibility and sliced buffers');

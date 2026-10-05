@@ -21,12 +21,22 @@ function createLiteratureCards({ reader, chapterKey, getParagraphSpacing, getCon
     node.style.setProperty(name, value, 'important');
   };
   const clear = () => { layer?.remove(); layer = null; cards = []; key = null; version = null; restore(); };
+  // Vue refs may be component instances or v-for arrays during a mode switch.
+  // Decorations work only with actual DOM elements from the current reader.
+  const domRef = value => {
+    if(Array.isArray(value)) { for(const item of value) { const node=domRef(item); if(node)return node; } return null; }
+    const node=value?.$el||value;
+    return node&&node.isConnected!==false&&typeof node.querySelectorAll==='function'&&typeof node.getBoundingClientRect==='function' ? node : null;
+  };
+  const find = (scope,selector) => domRef(typeof scope?.querySelector==='function' ? scope.querySelector(selector) : null);
+  const chapterDOM = () => domRef(reader.$refs.readerChapterContent);
   const quoteStyle = t => `margin:0;padding:0 0 0 8px;border-left:2px solid;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:${t.fontWeight};font-size:${t.fontSize};line-height:${t.lineHeight};font-family:${t.fontFamily};text-align:left;text-justify:none;letter-spacing:normal;word-spacing:0;`;
   const prepare = () => {
     clear();
     const config = getConfig();
     if(disposed || !config.enabled) return;
-    const root = reader.$refs.preRenderContainer, content = reader.$refs.preRenderContent;
+    const root = domRef(reader.$refs.preRenderContainer)||find(chapterDOM(),'.preRenderContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .preRenderContainer');
+    const content = find(root,'.preRenderContent')||domRef(reader.$refs.preRenderContent)||root;
     if(!root || !content || root.clientWidth < 60) return;
     const paragraphs = [...content.querySelectorAll('p')];
     const english = config.english.split(/\n\s*\n/).map(value => value.trim()).filter(Boolean);
@@ -76,7 +86,7 @@ function createLiteratureCards({ reader, chapterKey, getParagraphSpacing, getCon
     } finally { measure.remove(); }
   };
   const draw = () => {
-    const target = reader.$refs.renderTargetContainer;
+    const target = domRef(reader.$refs.renderTargetContainer)||find(chapterDOM(),'.renderTargetContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .renderTargetContainer');
     if(disposed || reader._isDestroyed || !getConfig().enabled || !cards.length || key !== chapterKey() || version !== reader.renderContentsVersion || reader.chapterContentState !== 'DONE') { layer?.remove(); layer = null; return; }
     if(!target?.isConnected || (layer?.parentElement === target && layer.dataset.wrpVersion === String(version))) return;
     const next = element('div','wrp-literature-cards');
@@ -93,6 +103,8 @@ function createLiteratureCards({ reader, chapterKey, getParagraphSpacing, getCon
       // native paragraph's 9px edge using the painted border, not a guess.
       const paintedBorder=parseFloat(getComputedStyle(box).borderLeftWidth)||1;
       const quoteInset=Math.max(0,9-paintedBorder);
+      const bottomBorder=parseFloat(getComputedStyle(box).borderBottomWidth)||1;
+      box.style.height=(card.height-(1-bottomBorder))+'px';
       const header = element('div','wrp-literature-card-header');
       const ui = `font-family:${card.typography.fontFamily};font-size:${card.typography.fontSize};font-weight:400;line-height:1.4;`;
       header.style.cssText = `position:absolute;left:0;right:0;top:0;height:${card.headerHeight}px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:1px solid var(--wrp-border);box-sizing:border-box;${ui}color:var(--wrp-text-muted);`;

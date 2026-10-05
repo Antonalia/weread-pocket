@@ -1,6 +1,6 @@
 function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled, requestReviews = null, eventDocument = document, environment = window }) {
   let disposed = false, marks = [], marksChapter = null, marksVersion = null, gesture = null, revision = 0, requestSerial = 0, cache = null;
-  let notesPanel = null, notesRoot = null, restoreNotesHide = null;
+  let notesPanel = null, notesRoot = null, restoreNotesHide = null, notesSerial = 0;
   const stopScrollPropagation = event => {
     if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     else event.stopPropagation?.();
@@ -23,6 +23,7 @@ function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled
     notesPanel.scrollTop = event.key === 'Home' ? 0 : event.key === 'End' ? extent : Math.max(0, Math.min(extent, notesPanel.scrollTop + delta));
   };
   const releaseNotesScroll = () => {
+    notesSerial++;
     eventDocument.removeEventListener('wheel', notesWheel, true);
     eventDocument.removeEventListener('keydown', notesKey, true);
     notesPanel?.classList?.remove('wrp-notes-scroll-active');
@@ -60,11 +61,23 @@ function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled
     if(cache?.key === requestKey) return cache.task;
     cache?.controller.abort();
     const controller = new environment.AbortController();
-    const entry = { key:requestKey, controller, task:null };
-    let timeout;
-    const deadline = new Promise((resolve, reject) => { timeout = environment.setTimeout(() => { controller.abort(); reject(new Error('Reading notes timeout')); }, 8000); });
-    const request = Promise.resolve().then(() => fetchReviews({ bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) }, controller.signal));
-    entry.task = Promise.race([request, deadline]).finally(() => environment.clearTimeout(timeout));
+    const entry = { key:requestKey, controller, task:null, settled:false };
+    const payload = { bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) };
+    let timeout, abort;
+    const cancelled = new Promise((resolve, reject) => {
+      abort = () => reject(new Error('Reading notes cancelled'));
+      controller.signal.addEventListener('abort', abort, {once:true});
+      timeout = environment.setTimeout(() => { controller.abort(); }, 8000);
+    });
+    const request = Promise.resolve().then(() => {
+      if(controller.signal.aborted) throw new Error('Reading notes cancelled');
+      return fetchReviews(payload, controller.signal);
+    });
+    entry.task = Promise.race([request, cancelled]).finally(() => {
+      entry.settled = true;
+      environment.clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', abort);
+    });
     cache = entry;
     entry.task.catch(() => { if(cache === entry) cache = null; });
     return entry.task;
@@ -86,23 +99,24 @@ function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled
       if(!notes?.length) throw new Error('Native notes conversion unavailable');
       if(serial !== requestSerial || !active(key, version, token, range)) return false;
       releaseNotesScroll();
+      const presentation = ++notesSerial;
       reader.showReviewDetailPanel(notes);
       // The official personal-note panel renders Delete for every item. Public
       // thoughts use its original presentation with no mutation callback.
       if(typeof reader.$showReviewDetailPanel === 'function' && reader.$refs?.appContent) {
-        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{releaseNotesScroll();reader.clearHighLight?.();},onClickItem:null});
+        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{if(presentation===notesSerial){releaseNotesScroll();reader.clearHighLight?.();}},onClickItem:null});
       } else {
         const detail = Object.values(reader.$refs || {}).find(ref => ref?.$options?.name === 'ReaderReviewDetailPanel');
         if(detail) {
           detail.onClickItem = null;
           const originalHide = detail.onHide;
-          const hide = (...args) => {releaseNotesScroll();originalHide?.apply(detail,args);};
+          const hide = (...args) => {if(presentation===notesSerial){releaseNotesScroll();originalHide?.apply(detail,args);}};
           detail.onHide = hide;
           restoreNotesHide = () => {if(detail.onHide === hide) detail.onHide = originalHide;};
         }
       }
       if(typeof reader.$nextTick==='function') await reader.$nextTick();
-      if(active(key,version,token,range) && serial===requestSerial) {
+      if(!disposed && !reader._isDestroyed && presentation === notesSerial) {
         const panel=eventDocument.querySelector?.('.readerReviewDetailPanel_bg');
         if(panel) lockNotesScroll(panel);
         for(const actions of panel?.querySelectorAll('.readerReviewDetail_item > .actions') || []) actions.remove();
@@ -140,14 +154,19 @@ function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled
   eventDocument.addEventListener('mousemove', move, true);
   eventDocument.addEventListener('click', click, true);
   eventDocument.addEventListener('pointercancel', cancel, true);
-  const clear = () => { releaseNotesScroll(); marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++; };
+  // Reflow invalidates canvas marks, not the lifetime of the visible native
+  // notes panel. Its hide callback owns the scroll lock until close/dispose.
+  const clear = () => {
+    marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++;
+    if(cache && !cache.settled) { cache.controller.abort(); cache = null; }
+  };
   return {
     openRange,
     setMarks(entries, key, version) { if(key !== marksChapter) clear(); marks = entries.filter(mark => mark?.element && rangeValue(mark.range)); marksChapter = key; marksVersion = version; },
     clear,
     dispose() {
       if(disposed) return;
-      disposed = true; clear(); cache?.controller.abort(); cache = null;
+      disposed = true; clear(); releaseNotesScroll(); cache?.controller.abort(); cache = null;
       eventDocument.removeEventListener('mousedown', down, true);
       eventDocument.removeEventListener('mousemove', move, true);
       eventDocument.removeEventListener('click', click, true);

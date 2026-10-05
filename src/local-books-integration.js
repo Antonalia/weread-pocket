@@ -1,5 +1,5 @@
 (function installLocalBooks(Pocket, dependencies) {
-  const {Modal, Setting, Notice, Menu, createLocalBookStore, createLocalReaderSurface} = dependencies;
+  const {Modal, Setting, Notice, Menu, createLocalBookStore, createLocalReaderSurface, createLocalBookSearch} = dependencies;
   const supported = /\.(epub|txt)$/i;
   const libraryFolder = 'WeRead Pocket';
   let nodePath, fileSystem;
@@ -69,6 +69,12 @@
   }
   const idFor = path => require('crypto').createHash('sha256').update(require('path').resolve(path).toLowerCase()).digest('hex').slice(0,24);
   const progressOf = value => ({chapter:Math.max(0,Math.floor(Number(value?.chapter)||0)),paragraph:Math.max(0,Math.floor(Number(value?.paragraph)||0)),offset:Math.max(0,Math.min(1,Number(value?.offset)||0)),percent:Math.max(0,Math.min(100,Number(value?.percent)||0))});
+  const bookmarkLimit = 500;
+  const bookmarksOf = values => (Array.isArray(values) ? values : []).slice(0, bookmarkLimit).filter(value => value && typeof value.id === 'string' && /^[a-f0-9]{24}$/i.test(value.id)).map(value => {
+    const finite = (number, maximum) => Number.isFinite(Number(number)) ? Math.max(0, Math.min(maximum, Number(number))) : 0;
+    return {id:value.id, chapter:Math.floor(finite(value.chapter, 10000000)), paragraph:Math.floor(finite(value.paragraph, 10000000)), offset:finite(value.offset, 1), percent:finite(value.percent, 100),
+      name:String(value.name || '').slice(0, 120), excerpt:String(value.excerpt || '').slice(0, 160), createdAt:finite(value.createdAt, 8640000000000000)};
+  });
   function normalizeLibrary(settings) {
     initializeNode();
     const seen = new Set();
@@ -76,7 +82,7 @@
       const id = preserveId(entry.id,entry.path), key=canonical(entry.path);
       if(seen.has(key)) return null;
       seen.add(key);
-      return {id,path:entry.path,sourcePath:typeof entry.sourcePath==='string'&&supported.test(entry.sourcePath)&&entry.sourcePath.length<32768?entry.sourcePath:'',title:String(entry.title||require('path').basename(entry.path)).slice(0,240),author:String(entry.author||'').slice(0,240),format:/\.epub$/i.test(entry.path)?'EPUB':'TXT',addedAt:Number(entry.addedAt)||Date.now(),lastOpened:Number(entry.lastOpened)||0,progress:progressOf(entry.progress)};
+      return {id,path:entry.path,sourcePath:typeof entry.sourcePath==='string'&&supported.test(entry.sourcePath)&&entry.sourcePath.length<32768?entry.sourcePath:'',title:String(entry.title||require('path').basename(entry.path)).slice(0,240),author:String(entry.author||'').slice(0,240),format:/\.epub$/i.test(entry.path)?'EPUB':'TXT',addedAt:Number(entry.addedAt)||Date.now(),lastOpened:Number(entry.lastOpened)||0,progress:progressOf(entry.progress),bookmarks:bookmarksOf(entry.bookmarks)};
     }).filter(Boolean);
     settings.localTypography = settings.localTypography === 'custom' ? 'custom' : 'publisher';
     settings.continuousChapters = settings.continuousChapters!==false;
@@ -128,6 +134,65 @@
     }
     onClose() {this.plugin.localShelfModal=null;this.contentEl.empty();}
   }
+  class LocalBookmarks extends (Modal || class {}) {
+    constructor(plugin) {super(plugin.app);this.plugin=plugin;this.entry=plugin.localEntry;}
+    onOpen() {this.modalEl?.addClass('wrp-local-tools-modal');this.render();}
+    render() {
+      const p=this.plugin, entry=this.entry, el=this.contentEl;
+      if(p.localEntry!==entry||!p.canUseLocalTools()){this.close();return;}
+      el.empty();el.addClass('wrp-local-tools');el.createEl('h2',{text:'本书书签'});el.createEl('p',{cls:'wrp-local-tools-book',text:entry.title});
+      const controls=el.createDiv({cls:'wrp-local-tools-controls'}),add=controls.createEl('button',{text:'添加当前位置',attr:{type:'button'}});
+      add.addEventListener('click',()=>{p.addLocalBookmark();this.render();});
+      const list=el.createDiv({cls:'wrp-local-tools-list',attr:{role:'list','aria-label':'本书书签'}}),bookmarks=bookmarksOf(entry.bookmarks);
+      if(!bookmarks.length)list.createEl('p',{cls:'wrp-local-tool-empty',text:'还没有书签。添加当前位置后，可随时回来。'});
+      for(const bookmark of bookmarks.slice().reverse()) {
+        const row=list.createDiv({cls:'wrp-local-tool-row',attr:{role:'listitem'}}),jump=row.createEl('button',{cls:'wrp-local-tool-jump',attr:{type:'button','aria-label':'跳转到书签：'+bookmark.name}});
+        jump.createSpan({cls:'wrp-local-tool-meta',text:bookmark.name||'第 '+(bookmark.chapter+1)+' 章'});jump.createSpan({cls:'wrp-local-tool-excerpt',text:bookmark.excerpt||'已读 '+Math.round(bookmark.percent)+'%'});
+        jump.addEventListener('click',async()=>{jump.disabled=true;try{if(p.localEntry===entry&&await p.jumpToLocalPosition(bookmark))this.close();}finally{if(jump.isConnected)jump.disabled=false;}});
+        const remove=row.createEl('button',{text:'移除',attr:{type:'button','aria-label':'移除书签：'+bookmark.name}});remove.addEventListener('click',()=>{p.removeLocalBookmark(entry.id,bookmark.id);this.render();});
+      }
+    }
+    onClose(){if(this.plugin.localToolsModal===this){this.plugin.cancelLocalToolNavigation();this.plugin.localToolsModal=null;}this.contentEl.empty();}
+  }
+  class LocalSearch extends (Modal || class {}) {
+    constructor(plugin) {super(plugin.app);this.plugin=plugin;this.entry=plugin.localEntry;this.book=plugin.localBook;this.running=false;this.results=[];}
+    onOpen() {
+      const p=this.plugin,el=this.contentEl;this.modalEl?.addClass('wrp-local-tools-modal');el.empty();el.addClass('wrp-local-tools');
+      el.createEl('h2',{text:'搜索本书'});el.createEl('p',{cls:'wrp-local-tools-book',text:this.entry.title});
+      const form=el.createEl('form',{cls:'wrp-local-tools-controls'});
+      this.input=form.createEl('input',{type:'search',attr:{placeholder:'输入正文中的文字','aria-label':'搜索本书正文',maxlength:'256',autocomplete:'off'}});
+      const submit=form.createEl('button',{text:'搜索',attr:{type:'submit'}});submit.addClass('mod-cta');
+      this.cancelButton=form.createEl('button',{text:'停止',attr:{type:'button'}});this.cancelButton.hidden=true;
+      this.status=el.createEl('p',{cls:'wrp-local-tools-status',text:'逐章搜索正文，最多显示 200 条结果。',attr:{role:'status','aria-live':'polite'}});
+      this.list=el.createDiv({cls:'wrp-local-tools-list',attr:{role:'list','aria-label':'正文搜索结果'}});
+      this.search=createLocalBookSearch({getBook:()=>p.localBook,isCurrent:()=>p.canUseLocalTools()&&p.localEntry===this.entry&&this.contentEl.isConnected,
+        extractParagraphs:(payload,index)=>p.localReader.getSearchParagraphs(payload,index),
+        onResults:results=>{this.results=results;this.renderResults();},onProgress:value=>{
+          const end=value.done?(value.truncated?'已显示前 200 条结果。':'搜索完成。'):('已搜索 '+value.processed+'/'+value.total+' 章，');
+          this.status.setText(end+'找到 '+value.count+' 条'+(value.failedChapters?'；'+value.failedChapters+' 章未能读取':'')+(value.done?'':'。'));
+        }});
+      form.addEventListener('submit',event=>{event.preventDefault();void this.runSearch();});
+      this.cancelButton.addEventListener('click',()=>{this.search.cancel();this.running=false;this.cancelButton.hidden=true;this.status.setText('已停止，保留已找到的 '+this.results.length+' 条结果。');});
+      this.input.focus();
+    }
+    async runSearch() {
+      const query=this.input.value.replace(/\s+/g,' ').trim();this.plugin.cancelLocalToolNavigation();this.search.cancel();this.results=[];this.list.empty();
+      if(!query){this.running=false;this.cancelButton.hidden=true;this.status.setText('请输入要查找的正文文字。');return;}
+      const revision=(this.queryRevision||0)+1;this.queryRevision=revision;this.query=query;this.running=true;this.cancelButton.hidden=false;
+      try {const result=await this.search.search(query);if(this.queryRevision!==revision||!this.contentEl.isConnected||result.canceled)return;this.running=false;this.cancelButton.hidden=true;if(!result.count)this.list.createEl('p',{cls:'wrp-local-tool-empty',text:result.failedChapters?'已读取的章节中没有匹配文字。':'本书正文中没有匹配文字。'});}
+      catch(error){if(this.contentEl.isConnected&&this.queryRevision===revision){this.running=false;this.cancelButton.hidden=true;this.status.setText('搜索失败：'+error.message);}}
+    }
+    renderResults() {
+      this.list.empty();const p=this.plugin;
+      for(const result of this.results) {
+        const row=this.list.createDiv({cls:'wrp-local-tool-row',attr:{role:'listitem'}}),jump=row.createEl('button',{cls:'wrp-local-tool-jump',attr:{type:'button'}});
+        jump.createSpan({cls:'wrp-local-tool-meta',text:this.book.chapters[result.chapter]?.title||'第 '+(result.chapter+1)+' 章'});
+        const excerpt=jump.createSpan({cls:'wrp-local-tool-excerpt'});excerpt.appendText(result.before);excerpt.createEl('mark',{text:result.match});excerpt.appendText(result.after);
+        jump.addEventListener('click',async()=>{jump.disabled=true;try{if(p.localEntry===this.entry&&p.localBook===this.book&&await p.jumpToLocalPosition({chapter:result.chapter,paragraph:result.paragraph,offset:0},{highlight:this.query,matchStart:result.matchStart,matchLength:result.matchLength}))this.close();}finally{if(jump.isConnected)jump.disabled=false;}});
+      }
+    }
+    onClose(){this.queryRevision=(this.queryRevision||0)+1;this.search?.destroy();this.results=[];if(this.plugin.localToolsModal===this){this.plugin.cancelLocalToolNavigation();this.plugin.localToolsModal=null;}this.contentEl.empty();}
+  }
   const original={};
   const wrap=(name,handler)=>{original[name]=Pocket.prototype[name];Pocket.prototype[name]=function(...args){return handler.call(this,original[name],...args);};};
   Pocket.prototype.isLocalSource=function(){return this.settings?.readingSource==='local';};
@@ -153,14 +218,14 @@
     this.localClosedBooks.add(book);return Promise.resolve().then(()=>book.close()).catch(()=>{});
   };
   Pocket.prototype.releaseLocalSource=function(){
-    this.captureLocalProgress();this.localOpenRevision++;this.localOpening=false;
+    this.closeLocalTools();this.captureLocalProgress();this.localOpenRevision++;this.localOpening=false;
     const reader=this.localReader,books=[this.localBook,this.localPendingPreviousBook];
     this.localReader=null;this.localBook=null;this.localEntry=null;this.localPendingPreviousBook=null;
     this.localReaderCleanup?.();this.localReaderCleanup=null;reader?.destroy();
     this.nativeFontReady=false;
     for(const book of books)void this.closeLocalBook(book);
   };
-  Pocket.prototype.updateLocalSourceVisibility=function(){this.readingSurface?.setAttribute('data-wrp-source',this.isLocalSource()?'local':'weread');};
+  Pocket.prototype.updateLocalSourceVisibility=function(){this.readingSurface?.setAttribute('data-wrp-source',this.isLocalSource()?'local':'weread');if(this.localToolsButton)this.localToolsButton.hidden=!this.isLocalSource();};
   Pocket.prototype.initializeLocalLibrary=function(){
     if(this.localLibraryInitialization)return this.localLibraryInitialization;
     this.localLibraryInitialization=(async()=>{
@@ -289,6 +354,7 @@
   Pocket.prototype.openLocalBook=async function(id,force=false){
     const entry=this.settings.localBooks.find(book=>book.id===id);
     if(!entry){new Notice('请先从本地书架选择一本书');return false;}
+    if(this.localEntry!==entry||force)this.closeLocalTools();
     const token=++this.localOpenRevision;
     const startupSource=!this.panel?this.settings.readingSource:null;
     if(!this.panel){this.settings.readingSource='local';this.build();}
@@ -379,6 +445,28 @@
     if(this.message)this.message.setText(title);
     if(this.readerView?.titleEl){this.readerView.headerData={title,addLabel:'',addDisabled:true};this.readerView.titleEl.setText(title);this.readerView.titleEl.title=title;this.readerView.addShelfButton.hidden=true;}
   };
+  Pocket.prototype.canUseLocalTools=function(){return !this.unloaded&&this.isLocalSource()&&this.ready&&!this.localOpening&&!!this.localEntry&&!!this.localBook&&!!this.localReader&&this.localReader.book===this.localBook;};
+  Pocket.prototype.cancelLocalToolNavigation=function(){this.localToolNavigationRevision=(this.localToolNavigationRevision||0)+1;};
+  Pocket.prototype.closeLocalTools=function(){this.cancelLocalToolNavigation();this.localToolsModal?.close();this.localToolsModal=null;};
+  Pocket.prototype.addLocalBookmark=function(){
+    if(!this.canUseLocalTools()){new Notice('请先打开一本本地图书');return false;}
+    const entry=this.localEntry,position=progressOf(this.localReader.captureProgress()),bookmarks=bookmarksOf(entry.bookmarks);
+    const existing=bookmarks.find(value=>value.chapter===position.chapter&&value.paragraph===position.paragraph&&Math.abs(value.offset-position.offset)<.02);
+    if(existing){new Notice('这个位置已有书签');return existing;}
+    if(bookmarks.length>=bookmarkLimit){new Notice('本书已有 500 个书签，请先移除不需要的书签');return false;}
+    const bookmark={id:require('crypto').randomBytes(12).toString('hex'),...position,name:String(this.localBook.chapters[position.chapter]?.title||'第 '+(position.chapter+1)+' 章').slice(0,120),
+      excerpt:String(this.localReader.getParagraphText?.(position.chapter,position.paragraph,160)||'').slice(0,160),createdAt:Date.now()};
+    entry.bookmarks=[...bookmarks,bookmark];this.persist();new Notice('已添加当前位置书签');return bookmark;
+  };
+  Pocket.prototype.removeLocalBookmark=function(bookId,bookmarkId){const entry=this.settings.localBooks.find(book=>book.id===bookId);if(!entry)return false;const before=bookmarksOf(entry.bookmarks);entry.bookmarks=before.filter(value=>value.id!==bookmarkId);if(entry.bookmarks.length===before.length)return false;this.persist();return true;};
+  Pocket.prototype.jumpToLocalPosition=async function(position,options){
+    if(!this.canUseLocalTools()||typeof this.localReader.navigateToProgress!=='function')return false;
+    const reader=this.localReader,entry=this.localEntry;this.cancelLocalToolNavigation();const revision=this.localToolNavigationRevision;const moved=await reader.navigateToProgress(position,options);
+    if(moved===false||revision!==this.localToolNavigationRevision||this.localReader!==reader||this.localEntry!==entry||!this.isLocalSource())return false;
+    this.captureLocalProgress();this.show();return true;
+  };
+  Pocket.prototype.showLocalBookmarks=function(){if(!this.canUseLocalTools()){new Notice('请先打开一本本地图书');return false;}this.closeLocalTools();this.localToolsModal=new LocalBookmarks(this);this.localToolsModal.open();return true;};
+  Pocket.prototype.showLocalSearch=function(){if(!this.canUseLocalTools()||typeof createLocalBookSearch!=='function'||typeof this.localReader.getSearchParagraphs!=='function'){new Notice('请先打开一本本地图书');return false;}this.closeLocalTools();this.localToolsModal=new LocalSearch(this);this.localToolsModal.open();return true;};
   Pocket.prototype.renderLocalBookSettings=function(el){
     const p=this;
     new Setting(el).setName('本地书架').setDesc('导入 EPUB、TXT 后，复制到仓库根目录的 WeRead Pocket 文件夹；原文件保留。正文按需读取，可选原书或各窗口自定义排版。移出书架只移除记录，保留图书文件。').addButton(b=>b.setButtonText('打开书架').onClick(()=>p.showBookshelf())).addButton(b=>b.setButtonText('添加图书').onClick(()=>p.importLocalFiles())).addButton(b=>b.setButtonText('打开书籍文件夹').onClick(()=>p.revealLocalLibraryFolder()));
@@ -423,8 +511,11 @@
   wrap('reloadPage',function(base,...args){return this.isLocalSource()?(this.localEntry?this.openLocalBook(this.localEntry.id,true):this.showBookshelf()):base.apply(this,args);});
   wrap('refreshReaderHeader',function(base,...args){return this.isLocalSource()?(this.updateLocalHeader(),Promise.resolve(null)):base.apply(this,args);});
   wrap('navigatePage',function(base,url){if(this.isLocalSource())this.useWeReadSource();return base.call(this,url);});
-  wrap('hide',function(base,...args){this.captureLocalProgress();return base.apply(this,args);});
+  wrap('hide',function(base,...args){this.closeLocalTools();this.captureLocalProgress();return base.apply(this,args);});
   wrap('updateShortcutHints',function(base,...args){const result=base.apply(this,args);this.updateLocalHeader();return result;});
   wrap('onunload',function(base,...args){this.captureLocalProgress();if(this.localEntry&&!this.__wrpValidationPersist)void this.saveData(this.settings).catch(()=>{});this.localFileOpenRevision=(this.localFileOpenRevision||0)+1;this.releaseLocalSource();this.localShelfModal?.close();return base.apply(this,args);});
-  return {normalizeLibrary,progressOf,idFor,libraryFolder,isManagedRelative,inside,libraryContext};
+  wrap('onload',async function(base,...args){const result=typeof base==='function'?await base.apply(this,args):undefined;if(this.unloaded||typeof this.addCommand!=='function')return result;
+    for(const [id,name,method] of [['add-local-bookmark','本地图书：添加当前位置书签','addLocalBookmark'],['show-local-bookmarks','本地图书：查看本书书签','showLocalBookmarks'],['search-local-book','本地图书：搜索本书正文','showLocalSearch']])this.addCommand({id,name,checkCallback:checking=>{const available=this.canUseLocalTools();if(available&&!checking)this[method]();return available;}});
+    return result;});
+  return {normalizeLibrary,progressOf,bookmarksOf,idFor,libraryFolder,isManagedRelative,inside,libraryContext,LocalBookmarks,LocalSearch};
 })

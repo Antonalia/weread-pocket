@@ -336,7 +336,7 @@
     return /^(?:第[〇零一二三四五六七八九十百千万两\d]{1,20}[章回卷节部篇集](?:\s|[：:、.．]|[^\d])?.*|chapter\s+(?:\d+|[ivxlcdm]+)\b.*|(?:序章|序言|前言|楔子|引子|尾声|后记|番外)(?:\s|[：:、.．]|$).*)$/i.test(value)?value:null;
   };
   async function openTxt(handle,fileSize,filePath) {
-    const sample=await readAt(handle,0,Math.min(fileSize,65536));let encoding='utf-8',bom=0;
+    const sample=await readAt(handle,0,Math.min(fileSize,65536));let encoding='utf-8',bom=0,readBytes=sample.length;
     if(sample.length>=3&&sample[0]===239&&sample[1]===187&&sample[2]===191)bom=3;
     else if(sample.length>=2&&sample[0]===255&&sample[1]===254){encoding='utf-16le';bom=2;}
     else if(sample.length>=2&&sample[0]===254&&sample[1]===255){encoding='utf-16be';bom=2;}
@@ -345,15 +345,31 @@
       if(odd>sample.length*.2&&even<sample.length*.02)encoding='utf-16le';
       else if(even>sample.length*.2&&odd<sample.length*.02)encoding='utf-16be';
       else if(even+odd>0)fail('TXT 含有二进制数据，无法作为文本阅读。');
-      else try{textDecoder('utf-8',true).decode(sample,{stream:true});}catch{encoding='gb18030';}
+      else {
+        // An ASCII introduction cannot determine the encoding of later text.
+        // Validate UTF-8 incrementally with a fixed 64 KiB buffer before indexing;
+        // legacy Chinese bytes anywhere in the book select GB18030 instead.
+        const validator=textDecoder('utf-8',true);let checked=sample.length;
+        try {
+          validator.decode(sample,{stream:true});
+          while(checked<fileSize) {
+            const chunk=await readAt(handle,checked,Math.min(65536,fileSize-checked));
+            checked+=chunk.length;readBytes+=chunk.length;validator.decode(chunk,{stream:true});
+          }
+          validator.decode();
+        } catch(error) {
+          if(error instanceof TypeError||error.name==='TypeError')encoding='gb18030';else throw error;
+        }
+      }
     }
     const wide=encoding.startsWith('utf-16'),unit=wide?2:1;
     if(wide&&(fileSize-bom)%2)fail('TXT 的 UTF-16 文本不完整。');
-    const decoder=textDecoder(encoding),chapters=[];let buffer=Buffer.alloc(0),base=bom,position=bom,hasText=false,readBytes=sample.length;
+    const decoder=textDecoder(encoding),chapters=[];let buffer=Buffer.alloc(0),base=bom,position=bom,hasText=false;
     let current={id:'text-0',title:'正文',start:bom,bodyStart:bom,end:fileSize},continuations=0,currentHasText=false,currentIsHeading=false;
     const flushChapter=end=>{current.end=end;if(currentHasText||currentIsHeading)chapters.push(current);if(chapters.length>limits.entries)fail('TXT 章节数量过多。');};
     function line(bytes,start,end) {
-      const value=decoder.decode(bytes).replace(/\r$/, '');
+      if(bytes.length>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
+      const value=decoder.decode(bytes);
       if(value.includes('\0'))fail('TXT 含有无法识别的控制字符。');
       if(clean(value))hasText=true;
       const label=heading(value);
@@ -369,13 +385,18 @@
       const length=Math.min(65536,fileSize-position),chunk=await readAt(handle,position,length);readBytes+=chunk.length;position+=length;
       buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;
       let start=0;
+      const codeAt=index=>wide?(encoding==='utf-16le'?buffer[index]|buffer[index+1]<<8:buffer[index]<<8|buffer[index+1]):buffer[index];
       for(let i=0;i+unit<=buffer.length;i+=unit) {
-        const newline=wide?(encoding==='utf-16le'?buffer[i]===10&&buffer[i+1]===0:buffer[i]===0&&buffer[i+1]===10):buffer[i]===10;
-        if(!newline)continue;
-        line(buffer.subarray(start,i),base+start,base+i+unit);start=i+unit;
+        const code=codeAt(i);if(code!==10&&code!==13)continue;
+        // Keep a trailing CR until the next chunk, so split CRLF consumes one
+        // line ending. Bare CR, LF and mixed endings use identical byte anchors.
+        if(code===13&&i+2*unit>buffer.length&&position<fileSize)break;
+        const ending=code===13&&i+2*unit<=buffer.length&&codeAt(i+unit)===10?2*unit:unit;
+        line(buffer.subarray(start,i),base+start,base+i+ending);start=i+ending;i=start-unit;
       }
       if(start){buffer=buffer.subarray(start);base+=start;}
-      if(buffer.length>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
+      const pendingCR=position<fileSize&&buffer.length>=unit&&codeAt(buffer.length-unit)===13?unit:0;
+      if(buffer.length-pendingCR>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
     }
     if(buffer.length)line(buffer,base,fileSize);
     flushChapter(fileSize);
@@ -390,9 +411,17 @@
         const chapter=chapters[index],length=chapter.end-chapter.bodyStart;
         if(length>limits.txtChapterBytes+limits.lineBytes)fail('TXT 章节内容超过读取上限。');
         const bytes=await readAt(handle,chapter.bodyStart,length);readBytes+=bytes.length;chapterReads++;
-        const originalParagraphs=decoder.decode(bytes).replace(/^\uFEFF/, '').split(/\r?\n/).filter(value=>value.trim());
-        const paragraphs=originalParagraphs.map(value=>value.trim());
-        return {paragraphs,originalParagraphs,index,title:chapter.title};
+        const text=decoder.decode(bytes).replace(/^\uFEFF/, '');
+        const originalParagraphs=text?text.split(/\r\n|\r|\n/):[];
+        // A final terminator does not create a phantom extra line. Real blank
+        // lines remain available in original layout but never shift content
+        // paragraph indexes used by custom layout, search and reading progress.
+        if(/[\r\n]$/.test(text))originalParagraphs.pop();
+        const paragraphs=[],originalParagraphIndexes=originalParagraphs.map(value=>{
+          const trimmed=value.trim();if(!trimmed)return null;
+          const paragraph=paragraphs.length;paragraphs.push(trimmed);return paragraph;
+        });
+        return {paragraphs,originalParagraphs,originalParagraphIndexes,index,title:chapter.title};
       },
       async readResource(){return null;},
       async close(){if(closed)return;closed=true;await handle.close();},

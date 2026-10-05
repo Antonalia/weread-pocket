@@ -105,7 +105,7 @@ const replace=(entries,name,data)=>entries.map(entry=>entry.name===name?{...entr
   const boundedPayload=await boundedAttributes.readChapter(0);assert.equal(boundedPayload.publisherHtml.className.length,4096);assert.equal(boundedPayload.publisherBody.style.length,4096);await boundedAttributes.close();
   const originalTxt=await store.open(write('original-indent.txt','第一章 缩进\n　　保留全角缩进。\n  Preserve leading spaces.  \n\n无缩进。'));
   const originalTxtChapter=await originalTxt.readChapter(0);
-  assert.deepEqual(Array.from(originalTxtChapter.originalParagraphs),['　　保留全角缩进。','  Preserve leading spaces.  ','无缩进。']);
+  assert.deepEqual(Array.from(originalTxtChapter.originalParagraphs),['　　保留全角缩进。','  Preserve leading spaces.  ','','无缩进。']);
   assert.deepEqual(Array.from(originalTxtChapter.paragraphs),['保留全角缩进。','Preserve leading spaces.','无缩进。']);await originalTxt.close();
   const blankPrefix=await store.open(write('blank-prefix.txt','\n  \n第一章 A\n内容。\n第二章 B\n内容二。'));assert.equal(blankPrefix.chapters.length,2);assert.equal(blankPrefix.chapters[0].title,'第一章 A');await blankPrefix.close();
   const emptyChapter=await store.open(write('empty-chapter.txt','第1章 A\n第2章 B\n内容。'));assert.equal(emptyChapter.chapters.length,2);assert.equal((await emptyChapter.readChapter(0)).paragraphs.length,0);await emptyChapter.close();
@@ -118,6 +118,34 @@ const replace=(entries,name,data)=>entries.map(entry=>entry.name===name?{...entr
   const le=await store.open(write('utf16le.txt',utf16le));assert.equal(le.encoding,'utf-16le');assert.equal((await le.readChapter(0)).paragraphs[0],'汉字内容。');await le.close();
   const utf16be=Buffer.from(utf16le);utf16be.swap16();const be=await store.open(write('utf16be.txt',utf16be));assert.equal(be.encoding,'utf-16be');assert.equal((await be.readChapter(0)).paragraphs[0],'汉字内容。');await be.close();
   const gb=await store.open(write('legacy.txt',Buffer.from([0xd6,0xd0,0xce,0xc4,0x0a])));assert.equal(gb.encoding,'gb18030');assert.equal((await gb.readChapter(0)).paragraphs[0],'中文');await gb.close();
+  // Detection checks all UTF-8 bytes in fixed-size chunks, even after a long
+  // ASCII introduction. Streaming decode also retains split multibyte units.
+  let largestDecode=0;
+  class MeasuredDecoder extends TextDecoder {decode(input,options){largestDecode=Math.max(largestDecode,input?.length||0);return super.decode(input,options);}}
+  const legacyLate=await createStore({TextDecoder:MeasuredDecoder}).open(write('late-legacy.txt',Buffer.concat([Buffer.from('ASCII introduction.\n'.repeat(5000)),Buffer.from([0xd6,0xd0,0xce,0xc4,10])])));
+  assert.equal(legacyLate.encoding,'gb18030');assert(largestDecode<=65536,'Encoding detection and TXT indexing must decode bounded chunks');
+  assert.equal((await legacyLate.readChapter(0)).paragraphs.at(-1),'中文');await legacyLate.close();
+  const utf8Split=await store.open(write('utf8-split.txt','x'.repeat(65535)+'汉字。\n'));
+  assert.equal(utf8Split.encoding,'utf-8');assert((await utf8Split.readChapter(0)).paragraphs[0].endsWith('汉字。'));await utf8Split.close();
+  const cr=await store.open(write('cr-only.txt','第1章 A\r第一段。\r\r第2章 B\r第二段。\r'));
+  assert.equal(cr.chapters.length,2);assert.deepEqual(Array.from((await cr.readChapter(0)).paragraphs),['第一段。']);
+  assert.deepEqual(Array.from((await cr.readChapter(1)).paragraphs),['第二段。']);await cr.close();
+  const mixed=await store.open(write('mixed-newlines.txt','第1章 A\r第一段。\r\n\r\n第二段。\n第2章 B\r内容二。\r'));
+  assert.equal(mixed.chapters.length,2);const mixedChapter=await mixed.readChapter(0);
+  assert.deepEqual(Array.from(mixedChapter.originalParagraphs),['第一段。','','第二段。']);
+  assert.deepEqual(Array.from(mixedChapter.originalParagraphIndexes),[0,null,1]);
+  assert.deepEqual(Array.from(mixedChapter.paragraphs),['第一段。','第二段。']);await mixed.close();
+  const blankLines=await store.open(write('real-blank-lines.txt','第1章 空行\n\n  \n甲。\n\n\n乙。\n'));
+  const blanks=await blankLines.readChapter(0);assert.deepEqual(Array.from(blanks.originalParagraphs),['','  ','甲。','','','乙。']);
+  assert.deepEqual(Array.from(blanks.originalParagraphIndexes),[null,null,0,null,null,1]);assert.deepEqual(Array.from(blanks.paragraphs),['甲。','乙。']);await blankLines.close();
+  const splitCRLF=await createStore({limits:{lineBytes:65535}}).open(write('split-crlf.txt','x'.repeat(65535)+'\r\n第2章 B\r尾段。'));
+  assert.equal(splitCRLF.chapters.length,2);assert.equal((await splitCRLF.readChapter(0)).paragraphs[0].length,65535);
+  assert.deepEqual(Array.from((await splitCRLF.readChapter(1)).paragraphs),['尾段。']);await splitCRLF.close();
+  for(const bigEndian of [false,true]) {
+    const bytes=Buffer.concat([Buffer.from([255,254]),Buffer.from('x'.repeat(32767)+'\r\n第2章 B\r尾段。\r','utf16le')]);if(bigEndian)bytes.swap16();
+    const wideMixed=await store.open(write('wide-crlf-'+bigEndian+'.txt',bytes));assert.equal(wideMixed.chapters.length,2);
+    assert.equal((await wideMixed.readChapter(0)).paragraphs[0].length,32767);assert.deepEqual(Array.from((await wideMixed.readChapter(1)).paragraphs),['尾段。']);await wideMixed.close();
+  }
   const boundaries='第1章 A\n'+'段落。\n'.repeat(16000)+'第2章 B\n最后一段。\n';
   const split=await createStore({limits:{txtChapterBytes:40000}}).open(write('bounded.txt',boundaries));
   assert(split.chapters.length>2,'Large chapters must split at line boundaries');

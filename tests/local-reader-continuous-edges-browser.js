@@ -32,10 +32,11 @@ api.applyAppearance({...config,continuousChapters:false});await until(()=>releas
 releases[0]();await pause();assert('old resource response is ignored after mode generation changes',!api.root.querySelector('img')&&api.stats.imageBytes===0,api.stats);
 releases[1]();await until(()=>!!api.root.querySelector('img'));
 assert('new generation resumes pending image loading',api.root.querySelectorAll('img').length===1&&api.stats.imageBytes===png.byteLength,{stats:api.stats,calls});
+const prunedImageURL=api.root.querySelector('img').src;
 api.applyAppearance(config);await until(()=>api.stats.chapterIndexes.includes(1)&&api.stats.pendingChapterReads===0);
 const node=api.root.querySelector('[data-wrp-chapter="1"] [data-wrp-paragraph="10"]');scroll.scrollTop=node.getBoundingClientRect().top-scroll.getBoundingClientRect().top+scroll.scrollTop;scroll.dispatchEvent(new Event('scroll'));await until(()=>api.stats.chapterIndexes.includes(2));
 const node2=api.root.querySelector('[data-wrp-chapter="2"] [data-wrp-paragraph="10"]');scroll.scrollTop=node2.getBoundingClientRect().top-scroll.getBoundingClientRect().top+scroll.scrollTop;scroll.dispatchEvent(new Event('scroll'));await until(()=>api.stats.chapterIndexes.includes(3));await pause();
-assert('pruning image chapter revokes its object URL',!api.stats.chapterIndexes.includes(0)&&revoked.size>=2&&api.stats.imageBytes<=png.byteLength*3,{stats:api.stats,created:created.size,revoked:revoked.size});
+assert('pruning image chapter revokes its object URL',!api.stats.chapterIndexes.includes(0)&&revoked.has(prunedImageURL)&&api.stats.imageBytes<=png.byteLength*3,{stats:api.stats,created:created.size,revoked:revoked.size});
 const staleImageReleases=[];
 const staleImage={...images,id:'stale-image-book',readResource:async()=>new Promise(resolve=>{staleImageReleases.push(()=>resolve({mime:'image/png',data:png}));})};
 await api.setBook(staleImage);await until(()=>staleImageReleases.length>0);await api.setBook(tiny);for(const release of staleImageReleases)release();await pause();

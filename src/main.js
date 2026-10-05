@@ -224,6 +224,11 @@ function fitRect(rect, viewport) {
     x: Math.max(8, Math.min(Number.isFinite(rect.x) ? rect.x : viewport.width - width - 24, viewport.width - width - 8)),
     y: Math.max(8, Math.min(Number.isFinite(rect.y) ? rect.y : viewport.height - height - 42, viewport.height - height - 8)) };
 }
+function minimumPagedPocketHeight(profile,zoom=1,toolbarHeight=30) {
+  const font=Math.max(8,Math.min(72,Number(profile?.fontSizePx)||16));
+  const line=Math.max(1,Math.min(4,Number(profile?.lineHeight)||1.9));
+  return Math.ceil(Math.max(320,font*line*4+104)*Math.max(.5,Math.min(1.5,Number(zoom)||1))+toolbarHeight+2);
+}
 class Pocket extends Plugin {
   async onload() {
     this.settings = { ...DEFAULTS, ...await this.loadData() };
@@ -302,7 +307,7 @@ class Pocket extends Plugin {
       this.requestReadingSurfaceLayout();
     }));
     this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.requestReadingSurfaceLayout()));
-    this.readerHeaderTimer = setInterval(() => { if(this.readerView && this.expanded && this.ready && !this.unloaded) void this.refreshReaderHeader(); }, 1200);
+    this.readerHeaderTimer = setInterval(() => { if(this.readerView && this.expanded && this.visible && !this.readingSurface?.classList.contains('wrp-surface-hidden') && this.ready && !this.unloaded) void this.refreshReaderHeader(); }, 1200);
     this.app.workspace.onLayoutReady(() => {
       if(this.unloaded) return;
       void this.initializeLocalLibrary().catch(error=>new Notice(`本地图书文件夹初始化失败：${error.message||error}`));
@@ -613,8 +618,10 @@ class Pocket extends Plugin {
   async refreshFontControls() {
     clearTimeout(this.fontStateRetryTimer);
     if(!this.ready || !this.webview || this.unloaded) { this.updateFontButtons(); return null; }
+    const guest=this.webview,navigation=this.navigationRevision;
     try {
-      const state = await this.webview.executeJavaScript('typeof window.__wrpGetFontState === "function" ? window.__wrpGetFontState() : null');
+      const state = await guest.executeJavaScript('typeof window.__wrpGetFontState === "function" ? window.__wrpGetFontState() : null');
+      if(this.unloaded||guest!==this.webview||navigation!==this.navigationRevision||this.isLocalSource())return null;
       if(state && Number.isInteger(state.level) && FONT_SIZES.includes(state.size)) {
         this.nativeFontLevel = state.level;
         this.nativeFontSize = state.size;
@@ -718,6 +725,7 @@ class Pocket extends Plugin {
     }, {passive:false});
     this.button(tools, 'library', '书架 · 切换正文来源', () => this.showBookshelf());
     this.button(tools, 'list', '打开章节目录', () => this.openCatalog());
+    this.localToolsButton=this.button(tools,'bookmark','本地图书：书签与全文搜索',event=>this.showLocalToolsMenu(event));
     this.addFontButtons(tools);
     this.addLayoutControls(tools, this.panel, true);
     this.button(tools, 'rotate-cw', '重新加载官方页面', () => this.reloadPage());
@@ -829,6 +837,7 @@ class Pocket extends Plugin {
     const webview = this.webview;
     if(!webview) return;
     try {const url=bookmarkUrl(webview.getURL());if(url)this.settings.lastUrl=url;}catch{}
+    this.readingFlowTask=null;
     this.navigationRevision=(this.navigationRevision||0)+1;
     this.appearanceRevision=(this.appearanceRevision||0)+1;this.appearanceGeneration=(this.appearanceGeneration||0)+1;
     for(const timer of ['appearanceRetryTimer','nativeLayoutRetryTimer','fontStateRetryTimer','reflowTimer']){clearTimeout(this[timer]);this[timer]=null;}
@@ -977,6 +986,7 @@ class Pocket extends Plugin {
     if(this.message&&this.ready&&!this.appearancePending) this.message.setText(enabled?`${title} · ${label} 收起`:title);
   }
   updateButtons() {
+    if(this.localToolsButton)this.localToolsButton.hidden=!this.isLocalSource();
     const automatic = this.automaticPocketEnabled();
     if(!automatic) this.cancelAutoHide();
     if(this.autoButton) {
@@ -1094,9 +1104,15 @@ class Pocket extends Plugin {
     this.layout(); this.updateButtons(); this.applyPocketDockHeight(); this.persist();
     return true;
   }
-  layout() {
+  pagedPocketMinimumHeight(flow=this.settings.readingFlow) {
+    if(flow!=='paged'||this.isLocalSource()||this.isLiteratureEnabled()||this.expanded)return 180;
+    return minimumPagedPocketHeight(this.layoutProfile(),this.settings.zoom,['left','right'].includes(this.pocketToolbarPosition())?0:30);
+  }
+  layout(flow=this.settings.readingFlow) {
     if(!this.panel) return;
     this.panel.setAttribute('data-wrp-toolbar-position',this.pocketToolbarPosition());
+    const minimum=this.pagedPocketMinimumHeight(flow);
+    this.panel.style.setProperty('--wrp-pocket-min-height',Math.min(minimum,Math.max(140,window.innerHeight-48))+'px');
     if(this.dockLeaf && !this.expanded) {
       Object.assign(this.panel.style, {left:'auto', top:'auto', width:'100%', height:'100%'});
       this.panel.classList.add('is-docked');
@@ -1106,7 +1122,7 @@ class Pocket extends Plugin {
     }
     this.panel.classList.remove('is-docked');
     const viewport = {width:window.innerWidth, height:window.innerHeight};
-    const rect = this.expanded ? fitRect({width:960,height:760,x:(viewport.width-Math.min(960,viewport.width-24))/2,y:20}, viewport) : fitRect(this.settings, viewport);
+    const rect = this.expanded ? fitRect({width:960,height:760,x:(viewport.width-Math.min(960,viewport.width-24))/2,y:20}, viewport) : fitRect({...this.settings,height:Math.max(Number(this.settings.height)||280,minimum)}, viewport);
     if(!this.expanded) Object.assign(this.settings,rect);
     Object.assign(this.panel.style, {left:rect.x+'px',top:rect.y+'px',width:rect.width+'px',height:rect.height+'px'});
     this.panel.classList.toggle('is-expanded',this.expanded);
@@ -1294,9 +1310,10 @@ class Pocket extends Plugin {
       if(applied && typeof window.__wrpApplyNativeTheme === 'function') await window.__wrpApplyNativeTheme(${JSON.stringify(this.resolvedTheme())});
       return applied;
     })()`);
+    const bridgeFinishAt=Date.now()+2500;
     try {
       const existing = await apply();
-      if(!current()) return false;
+      if(!current()||Date.now()>=bridgeFinishAt) return false;
       if(existing) return true;
       // Production Vue does not expose its root on DOM elements. Resolve only
       // the native reader's click handler, then keep a document-local bridge.
@@ -1305,10 +1322,24 @@ class Pocket extends Plugin {
       const alreadyAttached = guest.debugger.isAttached();
       if(alreadyAttached) return false;
       guest.debugger.attach('1.3');
+      // A lease prevents old cleanup from detaching a newer or external
+      // debugger connection after a document or appearance transition.
+      const lease={guest,attached:true};this.nativeDebuggerLease=lease;
+      const lostLease=()=>{lease.attached=false;};
+      guest.debugger.on?.('detach',lostLease);
       const group = `wrp-native-layout-${this.appearanceEpoch}-${navigation}-${generation}-${revision}`;
-      const command = (method, args) => {
-        if(!current()) throw new Error("Reader navigated");
-        return guest.debugger.sendCommand(method, args);
+      let expired=false;
+      const ownsLease=()=>this.nativeDebuggerLease===lease&&lease.attached&&!guest.isDestroyed()&&guest.debugger.isAttached();
+      const command = async (method, args) => {
+        if(!current()||expired||!ownsLease()) throw new Error('Reader navigated');
+        const remaining=bridgeFinishAt-Date.now();
+        if(remaining<=0){expired=true;throw new Error('Native bridge timed out');}
+        let timer;
+        try {
+          const response=await Promise.race([guest.debugger.sendCommand(method,args),new Promise((resolve,reject)=>{timer=setTimeout(()=>{expired=true;reject(new Error('Native bridge timed out'));},remaining);})]);
+          if(!current()||expired||!ownsLease()||Date.now()>=bridgeFinishAt)throw new Error('Reader navigated');
+          return response;
+        } finally {clearTimeout(timer);}
       };
       const seen = new Set(); let inspected = 0, found = false;
       const bind = function bindNativeReader() {
@@ -1340,7 +1371,7 @@ class Pocket extends Plugin {
   // WRP_PAGED_INSETS_END
 
   const cache = new Map(), failures = new Map(), watches = [];
-  let layer = null, timer = null, enabled = true, lastDraw = null, disposed = false;
+  let layer = null, timer = null, enabled = true, lastDraw = null, disposed = false, pendingDraw = null, drawRevision = 0;
   // Reserve space before native collection: the original canvases, offsets,
   // selection and progress continue to describe the same Chinese text.
   let literature = { enabled:false, english:'', paragraphs:3, fontFamily:'sans-serif' }, literatureStyle = null;
@@ -1369,12 +1400,22 @@ class Pocket extends Plugin {
     node.style.setProperty(name, value, 'important');
   };
   const clear = () => { layer?.remove(); layer = null; cards = []; key = null; version = null; restore(); };
+  // Vue refs may be component instances or v-for arrays during a mode switch.
+  // Decorations work only with actual DOM elements from the current reader.
+  const domRef = value => {
+    if(Array.isArray(value)) { for(const item of value) { const node=domRef(item); if(node)return node; } return null; }
+    const node=value?.$el||value;
+    return node&&node.isConnected!==false&&typeof node.querySelectorAll==='function'&&typeof node.getBoundingClientRect==='function' ? node : null;
+  };
+  const find = (scope,selector) => domRef(typeof scope?.querySelector==='function' ? scope.querySelector(selector) : null);
+  const chapterDOM = () => domRef(reader.$refs.readerChapterContent);
   const quoteStyle = t => `margin:0;padding:0 0 0 8px;border-left:2px solid;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:${t.fontWeight};font-size:${t.fontSize};line-height:${t.lineHeight};font-family:${t.fontFamily};text-align:left;text-justify:none;letter-spacing:normal;word-spacing:0;`;
   const prepare = () => {
     clear();
     const config = getConfig();
     if(disposed || !config.enabled) return;
-    const root = reader.$refs.preRenderContainer, content = reader.$refs.preRenderContent;
+    const root = domRef(reader.$refs.preRenderContainer)||find(chapterDOM(),'.preRenderContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .preRenderContainer');
+    const content = find(root,'.preRenderContent')||domRef(reader.$refs.preRenderContent)||root;
     if(!root || !content || root.clientWidth < 60) return;
     const paragraphs = [...content.querySelectorAll('p')];
     const english = config.english.split(/\n\s*\n/).map(value => value.trim()).filter(Boolean);
@@ -1424,7 +1465,7 @@ class Pocket extends Plugin {
     } finally { measure.remove(); }
   };
   const draw = () => {
-    const target = reader.$refs.renderTargetContainer;
+    const target = domRef(reader.$refs.renderTargetContainer)||find(chapterDOM(),'.renderTargetContainer')||find(eventDocument,'.wr_page_reader .readerChapterContent .renderTargetContainer');
     if(disposed || reader._isDestroyed || !getConfig().enabled || !cards.length || key !== chapterKey() || version !== reader.renderContentsVersion || reader.chapterContentState !== 'DONE') { layer?.remove(); layer = null; return; }
     if(!target?.isConnected || (layer?.parentElement === target && layer.dataset.wrpVersion === String(version))) return;
     const next = element('div','wrp-literature-cards');
@@ -1441,6 +1482,8 @@ class Pocket extends Plugin {
       // native paragraph's 9px edge using the painted border, not a guess.
       const paintedBorder=parseFloat(getComputedStyle(box).borderLeftWidth)||1;
       const quoteInset=Math.max(0,9-paintedBorder);
+      const bottomBorder=parseFloat(getComputedStyle(box).borderBottomWidth)||1;
+      box.style.height=(card.height-(1-bottomBorder))+'px';
       const header = element('div','wrp-literature-card-header');
       const ui = `font-family:${card.typography.fontFamily};font-size:${card.typography.fontSize};font-weight:400;line-height:1.4;`;
       header.style.cssText = `position:absolute;left:0;right:0;top:0;height:${card.headerHeight}px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:1px solid var(--wrp-border);box-sizing:border-box;${ui}color:var(--wrp-text-muted);`;
@@ -1464,10 +1507,12 @@ class Pocket extends Plugin {
   // WRP_LITERATURE_LAYOUT_END
   const cardLayout = legacy ? createLiteratureCards({reader,chapterKey:()=>chapterKey(),getParagraphSpacing:()=>paragraphSpacing,getConfig:()=>literature}) : null;
   const collectWithCards = originalCollect && function() {
-    cardLayout?.prepare();
+    // Decoration failures must never abort the official text collector: its
+    // font API swallows errors and otherwise leaves the whole book PRERENDER.
+    try {cardLayout?.prepare();}catch{try{cardLayout?.clear();}catch{}}
     const key = chapterKey();
     return Promise.resolve(originalCollect.apply(this,arguments)).then(result=>{
-      if(!disposed) cardLayout?.collected(key,reader.renderContentsVersion);
+      if(!disposed) {try{cardLayout?.collected(key,reader.renderContentsVersion);}catch{try{cardLayout?.clear();}catch{}}}
       return result;
     });
   };
@@ -1495,7 +1540,7 @@ class Pocket extends Plugin {
   // WRP_UNDERLINE_INTERACTION_START
   const createUnderlineInteraction = function createNativeUnderlineInteraction({ reader, store, chapterKey, isEnabled, requestReviews = null, eventDocument = document, environment = window }) {
   let disposed = false, marks = [], marksChapter = null, marksVersion = null, gesture = null, revision = 0, requestSerial = 0, cache = null;
-  let notesPanel = null, notesRoot = null, restoreNotesHide = null;
+  let notesPanel = null, notesRoot = null, restoreNotesHide = null, notesSerial = 0;
   const stopScrollPropagation = event => {
     if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     else event.stopPropagation?.();
@@ -1518,6 +1563,7 @@ class Pocket extends Plugin {
     notesPanel.scrollTop = event.key === 'Home' ? 0 : event.key === 'End' ? extent : Math.max(0, Math.min(extent, notesPanel.scrollTop + delta));
   };
   const releaseNotesScroll = () => {
+    notesSerial++;
     eventDocument.removeEventListener('wheel', notesWheel, true);
     eventDocument.removeEventListener('keydown', notesKey, true);
     notesPanel?.classList?.remove('wrp-notes-scroll-active');
@@ -1555,11 +1601,23 @@ class Pocket extends Plugin {
     if(cache?.key === requestKey) return cache.task;
     cache?.controller.abort();
     const controller = new environment.AbortController();
-    const entry = { key:requestKey, controller, task:null };
-    let timeout;
-    const deadline = new Promise((resolve, reject) => { timeout = environment.setTimeout(() => { controller.abort(); reject(new Error('Reading notes timeout')); }, 8000); });
-    const request = Promise.resolve().then(() => fetchReviews({ bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) }, controller.signal));
-    entry.task = Promise.race([request, deadline]).finally(() => environment.clearTimeout(timeout));
+    const entry = { key:requestKey, controller, task:null, settled:false };
+    const payload = { bookId:reader.bookId, chapterUid:reader.currentChapter.chapterUid, range:range.start + '-' + (range.end - 1) };
+    let timeout, abort;
+    const cancelled = new Promise((resolve, reject) => {
+      abort = () => reject(new Error('Reading notes cancelled'));
+      controller.signal.addEventListener('abort', abort, {once:true});
+      timeout = environment.setTimeout(() => { controller.abort(); }, 8000);
+    });
+    const request = Promise.resolve().then(() => {
+      if(controller.signal.aborted) throw new Error('Reading notes cancelled');
+      return fetchReviews(payload, controller.signal);
+    });
+    entry.task = Promise.race([request, cancelled]).finally(() => {
+      entry.settled = true;
+      environment.clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', abort);
+    });
     cache = entry;
     entry.task.catch(() => { if(cache === entry) cache = null; });
     return entry.task;
@@ -1581,23 +1639,24 @@ class Pocket extends Plugin {
       if(!notes?.length) throw new Error('Native notes conversion unavailable');
       if(serial !== requestSerial || !active(key, version, token, range)) return false;
       releaseNotesScroll();
+      const presentation = ++notesSerial;
       reader.showReviewDetailPanel(notes);
       // The official personal-note panel renders Delete for every item. Public
       // thoughts use its original presentation with no mutation callback.
       if(typeof reader.$showReviewDetailPanel === 'function' && reader.$refs?.appContent) {
-        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{releaseNotesScroll();reader.clearHighLight?.();},onClickItem:null});
+        reader.$showReviewDetailPanel({parentNode:reader.$refs.appContent,reviewNotes:notes,onHide:()=>{if(presentation===notesSerial){releaseNotesScroll();reader.clearHighLight?.();}},onClickItem:null});
       } else {
         const detail = Object.values(reader.$refs || {}).find(ref => ref?.$options?.name === 'ReaderReviewDetailPanel');
         if(detail) {
           detail.onClickItem = null;
           const originalHide = detail.onHide;
-          const hide = (...args) => {releaseNotesScroll();originalHide?.apply(detail,args);};
+          const hide = (...args) => {if(presentation===notesSerial){releaseNotesScroll();originalHide?.apply(detail,args);}};
           detail.onHide = hide;
           restoreNotesHide = () => {if(detail.onHide === hide) detail.onHide = originalHide;};
         }
       }
       if(typeof reader.$nextTick==='function') await reader.$nextTick();
-      if(active(key,version,token,range) && serial===requestSerial) {
+      if(!disposed && !reader._isDestroyed && presentation === notesSerial) {
         const panel=eventDocument.querySelector?.('.readerReviewDetailPanel_bg');
         if(panel) lockNotesScroll(panel);
         for(const actions of panel?.querySelectorAll('.readerReviewDetail_item > .actions') || []) actions.remove();
@@ -1635,14 +1694,19 @@ class Pocket extends Plugin {
   eventDocument.addEventListener('mousemove', move, true);
   eventDocument.addEventListener('click', click, true);
   eventDocument.addEventListener('pointercancel', cancel, true);
-  const clear = () => { releaseNotesScroll(); marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++; };
+  // Reflow invalidates canvas marks, not the lifetime of the visible native
+  // notes panel. Its hide callback owns the scroll lock until close/dispose.
+  const clear = () => {
+    marks = []; marksChapter = null; marksVersion = null; gesture = null; revision++; requestSerial++;
+    if(cache && !cache.settled) { cache.controller.abort(); cache = null; }
+  };
   return {
     openRange,
     setMarks(entries, key, version) { if(key !== marksChapter) clear(); marks = entries.filter(mark => mark?.element && rangeValue(mark.range)); marksChapter = key; marksVersion = version; },
     clear,
     dispose() {
       if(disposed) return;
-      disposed = true; clear(); cache?.controller.abort(); cache = null;
+      disposed = true; clear(); releaseNotesScroll(); cache?.controller.abort(); cache = null;
       eventDocument.removeEventListener('mousedown', down, true);
       eventDocument.removeEventListener('mousemove', move, true);
       eventDocument.removeEventListener('click', click, true);
@@ -1654,77 +1718,110 @@ class Pocket extends Plugin {
   const underlineInteraction = legacy ? createUnderlineInteraction({reader,store,chapterKey,isEnabled:()=>enabled&&!disposed}) : null;
   const schedule = () => {
     clearTimeout(timer);
-    if(!disposed) timer = setTimeout(() => { draw().catch(() => {}); }, 60);
+    if(!disposed) timer = setTimeout(() => { timer = null; draw().catch(() => {}); }, 60);
   };
-  const metadata = async (key, bookId, chapterUid) => {
-    if(cache.has(key)) return cache.get(key);
-    if(Date.now() - (failures.get(key) || 0) < 15000) return null;
-    const task = fetch(`/web/book/underlines?bookId=${encodeURIComponent(bookId)}&chapterUid=${encodeURIComponent(chapterUid)}`, { credentials: 'same-origin' })
-      .then(async response => {
-        if(!response.ok) throw new Error('Underline metadata unavailable');
-        const data = await response.json();
-        if(!Array.isArray(data.underlines)) throw new Error('Invalid underline metadata');
-        return data.underlines;
-      }).catch(() => { cache.delete(key); failures.set(key, Date.now()); return null; });
-    cache.set(key, task);
-    while(cache.size > 20) cache.delete(cache.keys().next().value);
-    return task;
-  };
-  const draw = async () => {
-    if(disposed || reader._isDestroyed || !legacy) return;
-    cardLayout?.draw();
-    if(!enabled) { layer?.remove(); layer = null; lastDraw = null; underlineInteraction?.clear(); return; }
-    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
-    const target = reader.$refs.renderTargetContainer;
-    const key = chapterKey();
-    if(!target || !key || !target.isConnected) return;
-    const version = reader.renderContentsVersion;
-    if(lastDraw === `${key}:${version}` && layer?.parentElement === target) return;
-    // Clear a previous chapter immediately, without moving or replacing text.
-    if(layer?.dataset.wrpChapter !== key) { layer?.remove(); layer = null; underlineInteraction?.clear(); }
-    const marks = await metadata(key, reader.bookId, reader.currentChapter.chapterUid);
-    if(!marks || disposed || !enabled || reader._isDestroyed || key !== chapterKey()) return;
-    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
-    if(target !== reader.$refs.renderTargetContainer || !target.isConnected) { schedule(); return; }
-    if(version !== reader.renderContentsVersion) { schedule(); return; }
-    const objects = reader.findObjsWithPoints({ x: -1e6, y: -1e6 }, { x: 1e6, y: 1e9 });
-    if(!objects.length) return;
-    const own = (reader.notesListInCurrentChapter || []).map(note => rangeOf(note.range)).filter(Boolean);
-    const next = document.createElement('div');
-    next.className = 'wrp-popular-underlines';
-    next.dataset.wrpChapter = key;
-    next.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;';
-    let ranges = 0;
-    const clickableMarks = [];
-    for(const mark of marks) {
-      const range = rangeOf(mark.range);
-      if(!range || range.end <= range.start) continue;
-      let drew = false;
-      for(const piece of subtract(range, own)) {
-        const selected = reader.findObjsInOffsetRange(objects, piece.start, piece.end);
-        for(const rect of reader.getRectsByContentObjs(selected)) {
-          if(![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) continue;
-          const line = document.createElement('div');
-          line.className = 'wrp-popular-underline';
-          line.style.cssText = `position:absolute;pointer-events:none;box-sizing:content-box;border-bottom:1px dashed #8c8c8e;left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;`;
-          next.appendChild(line);
-          clickableMarks.push({element:line,range});
-          drew = true;
-        }
-      }
-      if(drew) ranges++;
+  const cancelMetadata = exceptKey => {
+    for(const [key, entry] of cache) if(!entry.settled && key !== exceptKey) {
+      cache.delete(key); entry.controller.abort();
     }
-    next.dataset.wrpRanges = String(ranges);
-    next.dataset.wrpMarks = String(marks.length);
-    next.dataset.wrpRenderVersion = String(version);
-    layer?.remove();
-    target.appendChild(next);
-    layer = next;
-    underlineInteraction?.setMarks(clickableMarks,key,version);
-    lastDraw = `${key}:${version}`;
+  };
+  const metadata = (key, bookId, chapterUid) => {
+    if(cache.has(key)) return cache.get(key).task;
+    const now = Date.now();
+    for(const [failedKey, at] of failures) if(now - at >= 15000) failures.delete(failedKey);
+    if(failures.has(key)) return Promise.resolve(null);
+    const controller = new AbortController();
+    const entry = {task:null, controller, settled:false};
+    let timeout, abort;
+    const cancelled = new Promise((resolve, reject) => {
+      abort = () => { clearTimeout(timeout); reject(new Error('Underline metadata cancelled')); };
+      controller.signal.addEventListener('abort', abort, {once:true});
+      timeout = setTimeout(() => { controller.abort(); }, 8000);
+    });
+    const request = Promise.resolve().then(() => {
+      if(controller.signal.aborted) throw new Error('Underline metadata cancelled');
+      return fetch('/web/book/underlines?bookId=' + encodeURIComponent(bookId) + '&chapterUid=' + encodeURIComponent(chapterUid), {credentials:'same-origin', signal:controller.signal});
+    }).then(async response => {
+      if(!response.ok) throw new Error('Underline metadata unavailable');
+      const data = await response.json();
+      if(!Array.isArray(data.underlines)) throw new Error('Invalid underline metadata');
+      return data.underlines;
+    });
+    entry.task = Promise.race([request, cancelled]).catch(() => {
+      if(cache.get(key) === entry) cache.delete(key);
+      if(!disposed && !controller.signal.aborted) {
+        failures.delete(key); failures.set(key, Date.now());
+        while(failures.size > 20) failures.delete(failures.keys().next().value);
+      }
+      return null;
+    }).finally(() => {
+      entry.settled = true; clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', abort);
+    });
+    cache.set(key, entry);
+    while(cache.size > 20) {
+      const oldest = cache.keys().next().value, stale = cache.get(oldest);
+      cache.delete(oldest); if(!stale.settled) stale.controller.abort();
+    }
+    return entry.task;
+  };
+  const draw = () => {
+    if(disposed || reader._isDestroyed || !legacy || typographyBusy) return Promise.resolve();
+    cardLayout?.draw();
+    if(!enabled) {
+      layer?.remove(); layer = null; lastDraw = null; drawRevision++;
+      cancelMetadata(); underlineInteraction?.clear();
+      return Promise.resolve();
+    }
+    if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return Promise.resolve();
+    const target = reader.$refs.renderTargetContainer, key = chapterKey(), version = reader.renderContentsVersion, generation = drawRevision;
+    if(!target || !key || !target.isConnected) return Promise.resolve();
+    const stamp = key + ':' + version + ':' + generation;
+    if(lastDraw === stamp && layer?.parentElement === target) return Promise.resolve();
+    if(pendingDraw?.stamp === stamp && pendingDraw.target === target) return pendingDraw.task;
+    // In-flight draws of one native version share both metadata and geometry.
+    // A chapter transition releases pending requests before replacing marks.
+    cancelMetadata(key);
+    if(layer?.dataset.wrpChapter !== key) { layer?.remove(); layer = null; underlineInteraction?.clear(); }
+    const entry = {stamp, target, task:null};
+    entry.task = (async () => {
+      const marks = await metadata(key, reader.bookId, reader.currentChapter.chapterUid);
+      if(!marks || disposed || !enabled || typographyBusy || reader._isDestroyed || generation !== drawRevision || key !== chapterKey()) return;
+      if(typeof reader.chapterContentState === 'string' && reader.chapterContentState !== 'DONE') return;
+      if(target !== reader.$refs.renderTargetContainer || !target.isConnected || version !== reader.renderContentsVersion) { schedule(); return; }
+      if(lastDraw === stamp && layer?.parentElement === target) return;
+      const objects = reader.findObjsWithPoints({x:-1e6,y:-1e6}, {x:1e6,y:1e9});
+      if(!objects.length) return;
+      const own = (reader.notesListInCurrentChapter || []).map(note => rangeOf(note.range)).filter(Boolean);
+      const next = document.createElement('div');
+      next.className = 'wrp-popular-underlines'; next.dataset.wrpChapter = key;
+      next.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;';
+      let ranges = 0;
+      const clickableMarks = [];
+      for(const mark of marks) {
+        const range = rangeOf(mark.range);
+        if(!range || range.end <= range.start) continue;
+        let drew = false;
+        for(const piece of subtract(range, own)) {
+          const selected = reader.findObjsInOffsetRange(objects, piece.start, piece.end);
+          for(const rect of reader.getRectsByContentObjs(selected)) {
+            if(![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) continue;
+            const line = document.createElement('div'); line.className = 'wrp-popular-underline';
+            line.style.cssText = 'position:absolute;pointer-events:none;box-sizing:content-box;border-bottom:1px dashed #8c8c8e;left:' + rect.x + 'px;top:' + rect.y + 'px;width:' + rect.w + 'px;height:' + rect.h + 'px;';
+            next.appendChild(line); clickableMarks.push({element:line,range}); drew = true;
+          }
+        }
+        if(drew) ranges++;
+      }
+      next.dataset.wrpRanges = String(ranges); next.dataset.wrpMarks = String(marks.length); next.dataset.wrpRenderVersion = String(version);
+      layer?.remove(); target.appendChild(next); layer = next;
+      underlineInteraction?.setMarks(clickableMarks,key,version); lastDraw = stamp;
+    })().finally(() => { if(pendingDraw === entry) pendingDraw = null; });
+    pendingDraw = entry;
+    return entry.task;
   };
   const cleanup = () => {
-    disposed = true;
+    disposed = true; drawRevision++; pendingDraw = null; cancelMetadata(); cache.clear(); failures.clear();
     document.removeEventListener('keydown',nativeNavigationKey,true);
     if(window.__wrpGetNativeNavigationState===nativeNavigationState)delete window.__wrpGetNativeNavigationState;
     clearTimeout(timer);
@@ -1743,7 +1840,7 @@ class Pocket extends Plugin {
     watches.push(reader.$watch(() => reader.renderContentsVersion, schedule));
     watches.push(reader.$watch(() => reader.chapterContentState, schedule));
     watches.push(reader.$watch(() => chapterKey(), schedule));
-    watches.push(reader.$watch(() => reader.notesListInCurrentChapter, () => { lastDraw = null; schedule(); }, { deep: true }));
+    watches.push(reader.$watch(() => reader.notesListInCurrentChapter, () => { lastDraw = null; drawRevision++; schedule(); }, { deep: true }));
 
   }
   let navigationSequence=0, navigationAccepted=false, navigationPending=false, navigationResult=null, navigationError=null;
@@ -1781,14 +1878,14 @@ class Pocket extends Plugin {
   let fontStyle = null, lineStyle = null, paragraphStyle = null, lineHeight = 1.9, paragraphSpacing = 0;
   let restoreFontPx = null, restoreLineHeight = null, fontPreferenceSeen = false, linePreferenceSeen = false;
   let restoreParagraphSpacing = null, paragraphPreferenceSeen = false, preferenceKey = null;
-  let contentWidth = null, pendingReflow = false;
+  let contentWidth = null, pendingReflow = false, typographyBusy = false;
   const validLineHeight = value => typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 3;
   const validParagraphSpacing = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 80;
   const fontState = () => {
     if(disposed || reader._isDestroyed || typeof reader.changeFontSize !== 'function') return null;
     const level = Number(reader.fontSizeLevel);
     const custom = Number(fontStyle?.dataset.wrpFontSize);
-    return { level, size: level === 1 && smallFontSizes.includes(custom) ? custom : nativeFontSizes[level - 1], lineHeight, paragraphSpacing, preferenceKey, count: nativeFontSizes.length, ready: reader.chapterContentState === 'DONE' };
+    return { level, size: level === 1 && smallFontSizes.includes(custom) ? custom : nativeFontSizes[level - 1], lineHeight, paragraphSpacing, preferenceKey, count: nativeFontSizes.length, ready: !typographyBusy && reader.chapterContentState === 'DONE' };
   };
   const applyFontOverride = size => {
     if(!smallFontSizes.includes(size)) { fontStyle?.remove(); fontStyle = null; return; }
@@ -1832,25 +1929,31 @@ class Pocket extends Plugin {
     const previousOverride = Number(fontStyle?.dataset.wrpFontSize);
     const previousLineHeight = lineHeight, previousLineApplied = !!lineStyle;
     const previousParagraphSpacing = paragraphSpacing, previousParagraphApplied = !!paragraphStyle;
-    if(spacing != null) applyLineHeight(spacing);
-    if(paragraphs != null) applyParagraphSpacing(paragraphs);
-    applyFontOverride(size);
-    layer?.remove(); layer = null; lastDraw = null;
-    underlineInteraction?.clear();
-    try { await Promise.resolve(reader.changeFontSize(level)); }
-    catch {
-      if(disposed || reader._isDestroyed) return false;
-      lineHeight = previousLineHeight;
-      if(previousLineApplied) applyLineHeight(previousLineHeight);
-      else { lineStyle?.remove(); lineStyle = null; }
-      paragraphSpacing = previousParagraphSpacing;
-      if(previousParagraphApplied) applyParagraphSpacing(previousParagraphSpacing);
-      else { paragraphStyle?.remove(); paragraphStyle = null; }
-      applyFontOverride(previousOverride);
-      try { await Promise.resolve(reader.changeFontSize(before.level)); } catch { /* Keep the last font preference for recovery. */ }
-      return false;
+    typographyBusy = true;
+    try {
+      if(spacing != null) applyLineHeight(spacing);
+      if(paragraphs != null) applyParagraphSpacing(paragraphs);
+      applyFontOverride(size);
+      layer?.remove(); layer = null; lastDraw = null; drawRevision++;
+      underlineInteraction?.clear();
+      try { await Promise.resolve(reader.changeFontSize(level)); }
+      catch {
+        if(disposed || reader._isDestroyed) return false;
+        lineHeight = previousLineHeight;
+        if(previousLineApplied) applyLineHeight(previousLineHeight);
+        else { lineStyle?.remove(); lineStyle = null; }
+        paragraphSpacing = previousParagraphSpacing;
+        if(previousParagraphApplied) applyParagraphSpacing(previousParagraphSpacing);
+        else { paragraphStyle?.remove(); paragraphStyle = null; }
+        applyFontOverride(previousOverride);
+        try { await Promise.resolve(reader.changeFontSize(before.level)); } catch { /* Keep the last font preference for recovery. */ }
+        return false;
+      }
+      return !disposed && !reader._isDestroyed;
+    } finally {
+      typographyBusy = false;
+      if(!disposed && !reader._isDestroyed) { restoreTypography(); if(!typographyBusy && reader.chapterContentState === 'DONE') schedule(); }
     }
-    return !disposed && !reader._isDestroyed;
   };
   window.__wrpSetFontSize = size => {
     const before = fontState();
@@ -1871,7 +1974,7 @@ class Pocket extends Plugin {
     return setTypography(before.size, null, false, value);
   };
   const restoreTypography = () => {
-    if((restoreFontPx == null && restoreLineHeight == null && restoreParagraphSpacing == null && !pendingReflow) || reader.chapterContentState !== 'DONE' || disposed) return;
+    if((restoreFontPx == null && restoreLineHeight == null && restoreParagraphSpacing == null && !pendingReflow) || reader.chapterContentState !== 'DONE' || disposed || typographyBusy) return;
     const size = restoreFontPx ?? fontState()?.size, spacing = restoreLineHeight, force = pendingReflow, paragraphs = restoreParagraphSpacing;
     restoreFontPx = null; restoreLineHeight = null; restoreParagraphSpacing = null; pendingReflow = false;
     const requestedKey = preferenceKey;
@@ -1913,7 +2016,7 @@ class Pocket extends Plugin {
     if(desiredTheme && !disposed && store.state.isWhiteTheme !== (desiredTheme === 'light')) window.__wrpApplyNativeTheme(desiredTheme).catch(() => {});
   }));
   window.__wrpSetReadingFlow = flow => {
-    if(reader._isDestroyed || !union || typeof union.handleSwitchMode !== 'function') return false;
+    if(disposed || reader._isDestroyed || !union || typeof union.handleSwitchMode !== 'function' || !['continuous','scroll','paged'].includes(flow) || typographyBusy || (reader.chapterContentState != null && reader.chapterContentState !== 'DONE')) return false;
     const horizontal = !!document.querySelector('.wr_horizontalReader');
     if(horizontal !== (flow === 'paged')) union.handleSwitchMode(flow === 'paged');
     return true;
@@ -1944,7 +2047,7 @@ class Pocket extends Plugin {
     }
     restoreTypography();
     if(legacy) {
-      if(enabled !== showPopular) lastDraw = null;
+      if(enabled !== !!showPopular) { lastDraw = null; drawRevision++; if(!showPopular) cancelMetadata(); }
       enabled = !!showPopular;
       schedule();
       return true;
@@ -1988,7 +2091,7 @@ class Pocket extends Plugin {
             if(value?.type !== 'object' || !value.objectId || ['Array', 'Window', 'Document'].includes(value.className)) continue;
             // Official chapter loading reads stack-frame filenames. Label this
             // dynamic script and keep a newline after the sourceURL comment.
-            const result = await command('Runtime.callFunctionOn', { objectId: value.objectId, objectGroup: group, returnByValue: true, functionDeclaration: bind.toString()+'\n//# sourceURL=weread-pocket-native-reader.js\n' });
+            const result = await command('Runtime.callFunctionOn', { objectId: value.objectId, objectGroup: group, returnByValue: true, functionDeclaration: 'function(){if(Date.now()>='+bridgeFinishAt+')return false;const style=document.getElementById(\"weread-pocket-appearance\");if(!style||Number(style.dataset.wrpEpoch)!=='+this.appearanceEpoch+'||Number(style.dataset.wrpRevision)!=='+revision+')return false;return ('+bind.toString()+').call(this);}'+'\n//# sourceURL=weread-pocket-native-reader.js\n' });
             if(result.result?.value === true) { found = true; return; }
           }
           for(const variable of vars.result || []) {
@@ -2004,10 +2107,19 @@ class Pocket extends Plugin {
         });
         await walk(result.result?.objectId, 0);
       } finally {
-        await guest.debugger.sendCommand('Runtime.releaseObjectGroup', { objectGroup: group }).catch(() => {});
-        if(!alreadyAttached && !guest.isDestroyed() && guest.debugger.isAttached()) guest.debugger.detach();
+        expired=true;
+        let releaseTimer;
+        try {
+          if(ownsLease())await Promise.race([Promise.resolve().then(()=>guest.debugger.sendCommand('Runtime.releaseObjectGroup',{objectGroup:group})).catch(()=>{}),new Promise(resolve=>{releaseTimer=setTimeout(resolve,250);})]);
+        } finally {
+          clearTimeout(releaseTimer);
+          guest.debugger.removeListener?.('detach',lostLease);
+          if(ownsLease()){try{guest.debugger.detach();}catch{/* The guest may have closed while releasing its object group. */}}
+          lease.attached=false;if(this.nativeDebuggerLease===lease)this.nativeDebuggerLease=null;
+        }
       }
-      return found && current() ? !!await apply() : false;
+      if(!found||!current()||Date.now()>=bridgeFinishAt)return false;
+      const applied=await apply();return current()&&!!applied;
     } catch { return false; }
   }
   async refreshReaderLayout() {
@@ -2024,37 +2136,55 @@ class Pocket extends Plugin {
     } catch { /* A navigation or detached webview may invalidate the document. */ }
   }
   setReadingFlow(flow) {
-    const task = (this.readingFlowTask || Promise.resolve()).then(() => this.changeReadingFlow(flow));
-    this.readingFlowTask = task.catch(() => false);
-    return task;
+    const local=this.isLocalSource(),guest=this.webview,book=this.localBook;
+    const current=()=>!this.unloaded&&local===this.isLocalSource()&&(local?book===this.localBook:guest===this.webview);
+    const task=(this.readingFlowTask||Promise.resolve()).then(()=>current()?this.changeReadingFlow(flow):false);
+    this.readingFlowTask=task.catch(()=>false);return task;
   }
   async changeReadingFlow(flow) {
-    if(this.unloaded) return false;
-    if(!['scroll', 'paged'].includes(flow)) return false;
-    if(flow==='paged'&&this.isLiteratureEnabled()) {new Notice('请先关闭文献卡片外观，再使用分页阅读');return false;}
-    if(!this.ready || !this.webview) { new Notice('请先打开一本书，再切换阅读方式'); return false; }
+    if(this.unloaded||!['scroll','paged'].includes(flow))return false;
+    if(flow==='paged'&&this.isLiteratureEnabled()){new Notice('请先关闭文献卡片外观，再使用分页阅读');return false;}
+    if(!this.ready||!this.webview){new Notice('请先打开一本书，再切换阅读方式');return false;}
+    const guest=this.webview,current=()=>!this.unloaded&&!this.isLocalSource()&&this.webview===guest;
+    // The official mode switch may reload its own document. Source identity,
+    // rather than navigation revision, invalidates this operation.
+    const execute=async code=>{let timer;try{return await Promise.race([guest.executeJavaScript(code),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),1000);})]);}finally{clearTimeout(timer);}};
+    const wait=()=>new Promise(resolve=>setTimeout(resolve,150));
+    const finishAt=Date.now()+15000;
     try {
-      await this.syncNativeReaderPadding();
-      const requested = await this.webview.executeJavaScript(`typeof window.__wrpSetReadingFlow === 'function' && window.__wrpSetReadingFlow(${JSON.stringify(flow)})`);
-      if(!requested) { new Notice('请先打开一本书，再切换阅读方式'); return false; }
-      for(let attempt = 0; attempt < 60; attempt++) {
-        if(this.ready) {
-          try {
-            const current = await this.webview.executeJavaScript('document.querySelector(".readerChapterContent") ? (document.querySelector(".wr_horizontalReader") ? "paged" : "scroll") : null');
-            if(current === flow) {
-              this.settings.readingFlow = flow; this.persist();
-              // A paged request started in an ordinary view may finish after
-              // moving into a card view. Reconcile that newest location.
-              if(flow === 'paged' && this.isLiteratureEnabled()) void this.applyAppearance();
-              return true;
-            }
-          } catch { /* The official switch reloads its document. */ }
+      if(!current())return false;
+      await this.syncNativeReaderPadding();if(!current())return false;
+      this.layout(flow);this.applyPocketDockHeight(flow);this.syncReadingSurface();
+      let requested=false;
+      while(current()&&Date.now()<finishAt) {
+        if(!requested&&this.ready) {
+          const font=await execute('typeof window.__wrpGetFontState === "function" ? window.__wrpGetFontState() : null');
+          if(!current())return false;
+          if(font?.ready&&!this.fontBusy) {
+            requested=!!await execute('typeof window.__wrpSetReadingFlow === "function" && window.__wrpSetReadingFlow('+JSON.stringify(flow)+')');
+            if(!current())return false;
+          }
         }
-        await new Promise(resolve => setTimeout(resolve, 250));
+        if(requested&&this.ready) {
+          const state=await execute('({flow:document.querySelector(".readerChapterContent") ? (document.querySelector(".wr_horizontalReader") ? "paged" : "scroll") : null,font:typeof window.__wrpGetFontState === "function" ? window.__wrpGetFontState() : null})');
+          if(!current())return false;
+          if(state?.flow===flow&&state.font?.ready) {
+            this.settings.readingFlow=flow;this.persist();this.layout();this.applyPocketDockHeight();
+            if(flow==='paged'&&this.isLiteratureEnabled())void this.applyAppearance();
+            return true;
+          }
+        }
+        await wait();
       }
-      new Notice('阅读方式尚未切换，请等网页加载完成后重试');
+      if(current())new Notice('阅读器仍在排版，请等正文显示后重试');
       return false;
-    } catch { new Notice('阅读方式暂时无法切换，请稍后重试'); return false; }
+    } catch {if(current())new Notice('阅读方式暂时无法切换，请稍后重试');return false;}
+  }
+  showLocalToolsMenu(event) {
+    if(!this.isLocalSource())return;
+    const menu=new Menu();
+    for(const [title,icon,method]of [['添加当前位置书签','bookmark-plus','addLocalBookmark'],['本书书签','bookmark','showLocalBookmarks'],['搜索本书正文','search','showLocalSearch']])menu.addItem(item=>item.setTitle(title).setIcon(icon).setDisabled(!this.canUseLocalTools()).onClick(()=>this[method]()));
+    menu.showAtMouseEvent(event);
   }
   turnPage(key) { if(this.ready) {this.webview.focus(); this.webview.sendInputEvent({type:'keyDown',keyCode:key}); this.webview.sendInputEvent({type:'keyUp',keyCode:key});} }
   async openCatalog() {
@@ -2123,7 +2253,7 @@ class Pocket extends Plugin {
     }).finally(() => { if(this.dockOpenTask === queued) this.dockOpenTask = null; });
     return queued;
   }
-  applyPocketDockHeight() {
+  applyPocketDockHeight(flow=this.settings.readingFlow) {
     if(!this.dockLeaf || this.unloaded) return;
     const right = this.app.workspace.rightSplit;
     let group = this.dockLeaf.parent;
@@ -2136,7 +2266,7 @@ class Pocket extends Plugin {
     // Only a bottom toolbar can release vertical space without moving buttons.
     // Other edges hide the reading body while retaining the pane's dimensions.
     const compactHeight=this.dockCollapsed&&this.pocketToolbarPosition()==='bottom';
-    const height = compactHeight ? (this.panel.querySelector('.wrp-header')?.getBoundingClientRect().height || 30) : Math.min(Math.max(160, Number(this.settings.dockHeight) || 280), Math.max(120, total - 120));
+    const height = compactHeight ? (this.panel.querySelector('.wrp-header')?.getBoundingClientRect().height || 30) : Math.min(Math.max(160, this.pagedPocketMinimumHeight(flow), Number(this.settings.dockHeight) || 280), Math.max(120, total - 120));
     const percent = Math.max(1, Math.min(99, height / total * 100));
     const weight = child => Number(child.dimension) > 0 ? Number(child.dimension) : 1;
     const sum = others.reduce((value, child) => value + weight(child), 0);
@@ -2332,6 +2462,10 @@ class ReaderView extends ViewBase {
   showMoreMenu(event) {
     const menu = new Menu(), p = this.plugin;
     menu.addItem(item => item.setTitle('本地书架').setIcon('library').onClick(() => p.showBookshelf()));
+    if(p.isLocalSource()) {
+      for(const [title,icon,method]of [['添加当前位置书签','bookmark-plus','addLocalBookmark'],['本书书签','bookmark','showLocalBookmarks'],['搜索本书正文','search','showLocalSearch']])menu.addItem(item=>item.setTitle(title).setIcon(icon).setDisabled(!p.canUseLocalTools()).onClick(()=>p[method]()));
+      menu.addSeparator();
+    }
     menu.addItem(item => item.setTitle('首页').setIcon('home').onClick(() => p.navigatePage('https://weread.qq.com/')));
     menu.addItem(item => item.setTitle('我的书架 / 登录').setIcon('library').onClick(() => p.navigatePage(HOME)));
     const cardLocation=p.isReaderInSidebar(this.leaf)?'sidebar':'tab';
@@ -2939,7 +3073,7 @@ const createLocalBookStore = (function createLocalBookStore(options = {}) {
     return /^(?:第[〇零一二三四五六七八九十百千万两\d]{1,20}[章回卷节部篇集](?:\s|[：:、.．]|[^\d])?.*|chapter\s+(?:\d+|[ivxlcdm]+)\b.*|(?:序章|序言|前言|楔子|引子|尾声|后记|番外)(?:\s|[：:、.．]|$).*)$/i.test(value)?value:null;
   };
   async function openTxt(handle,fileSize,filePath) {
-    const sample=await readAt(handle,0,Math.min(fileSize,65536));let encoding='utf-8',bom=0;
+    const sample=await readAt(handle,0,Math.min(fileSize,65536));let encoding='utf-8',bom=0,readBytes=sample.length;
     if(sample.length>=3&&sample[0]===239&&sample[1]===187&&sample[2]===191)bom=3;
     else if(sample.length>=2&&sample[0]===255&&sample[1]===254){encoding='utf-16le';bom=2;}
     else if(sample.length>=2&&sample[0]===254&&sample[1]===255){encoding='utf-16be';bom=2;}
@@ -2948,15 +3082,31 @@ const createLocalBookStore = (function createLocalBookStore(options = {}) {
       if(odd>sample.length*.2&&even<sample.length*.02)encoding='utf-16le';
       else if(even>sample.length*.2&&odd<sample.length*.02)encoding='utf-16be';
       else if(even+odd>0)fail('TXT 含有二进制数据，无法作为文本阅读。');
-      else try{textDecoder('utf-8',true).decode(sample,{stream:true});}catch{encoding='gb18030';}
+      else {
+        // An ASCII introduction cannot determine the encoding of later text.
+        // Validate UTF-8 incrementally with a fixed 64 KiB buffer before indexing;
+        // legacy Chinese bytes anywhere in the book select GB18030 instead.
+        const validator=textDecoder('utf-8',true);let checked=sample.length;
+        try {
+          validator.decode(sample,{stream:true});
+          while(checked<fileSize) {
+            const chunk=await readAt(handle,checked,Math.min(65536,fileSize-checked));
+            checked+=chunk.length;readBytes+=chunk.length;validator.decode(chunk,{stream:true});
+          }
+          validator.decode();
+        } catch(error) {
+          if(error instanceof TypeError||error.name==='TypeError')encoding='gb18030';else throw error;
+        }
+      }
     }
     const wide=encoding.startsWith('utf-16'),unit=wide?2:1;
     if(wide&&(fileSize-bom)%2)fail('TXT 的 UTF-16 文本不完整。');
-    const decoder=textDecoder(encoding),chapters=[];let buffer=Buffer.alloc(0),base=bom,position=bom,hasText=false,readBytes=sample.length;
+    const decoder=textDecoder(encoding),chapters=[];let buffer=Buffer.alloc(0),base=bom,position=bom,hasText=false;
     let current={id:'text-0',title:'正文',start:bom,bodyStart:bom,end:fileSize},continuations=0,currentHasText=false,currentIsHeading=false;
     const flushChapter=end=>{current.end=end;if(currentHasText||currentIsHeading)chapters.push(current);if(chapters.length>limits.entries)fail('TXT 章节数量过多。');};
     function line(bytes,start,end) {
-      const value=decoder.decode(bytes).replace(/\r$/, '');
+      if(bytes.length>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
+      const value=decoder.decode(bytes);
       if(value.includes('\0'))fail('TXT 含有无法识别的控制字符。');
       if(clean(value))hasText=true;
       const label=heading(value);
@@ -2972,13 +3122,18 @@ const createLocalBookStore = (function createLocalBookStore(options = {}) {
       const length=Math.min(65536,fileSize-position),chunk=await readAt(handle,position,length);readBytes+=chunk.length;position+=length;
       buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;
       let start=0;
+      const codeAt=index=>wide?(encoding==='utf-16le'?buffer[index]|buffer[index+1]<<8:buffer[index]<<8|buffer[index+1]):buffer[index];
       for(let i=0;i+unit<=buffer.length;i+=unit) {
-        const newline=wide?(encoding==='utf-16le'?buffer[i]===10&&buffer[i+1]===0:buffer[i]===0&&buffer[i+1]===10):buffer[i]===10;
-        if(!newline)continue;
-        line(buffer.subarray(start,i),base+start,base+i+unit);start=i+unit;
+        const code=codeAt(i);if(code!==10&&code!==13)continue;
+        // Keep a trailing CR until the next chunk, so split CRLF consumes one
+        // line ending. Bare CR, LF and mixed endings use identical byte anchors.
+        if(code===13&&i+2*unit>buffer.length&&position<fileSize)break;
+        const ending=code===13&&i+2*unit<=buffer.length&&codeAt(i+unit)===10?2*unit:unit;
+        line(buffer.subarray(start,i),base+start,base+i+ending);start=i+ending;i=start-unit;
       }
       if(start){buffer=buffer.subarray(start);base+=start;}
-      if(buffer.length>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
+      const pendingCR=position<fileSize&&buffer.length>=unit&&codeAt(buffer.length-unit)===13?unit:0;
+      if(buffer.length-pendingCR>limits.lineBytes)fail('TXT 单行过长，请使用包含正常换行的文本。');
     }
     if(buffer.length)line(buffer,base,fileSize);
     flushChapter(fileSize);
@@ -2993,9 +3148,17 @@ const createLocalBookStore = (function createLocalBookStore(options = {}) {
         const chapter=chapters[index],length=chapter.end-chapter.bodyStart;
         if(length>limits.txtChapterBytes+limits.lineBytes)fail('TXT 章节内容超过读取上限。');
         const bytes=await readAt(handle,chapter.bodyStart,length);readBytes+=bytes.length;chapterReads++;
-        const originalParagraphs=decoder.decode(bytes).replace(/^\uFEFF/, '').split(/\r?\n/).filter(value=>value.trim());
-        const paragraphs=originalParagraphs.map(value=>value.trim());
-        return {paragraphs,originalParagraphs,index,title:chapter.title};
+        const text=decoder.decode(bytes).replace(/^\uFEFF/, '');
+        const originalParagraphs=text?text.split(/\r\n|\r|\n/):[];
+        // A final terminator does not create a phantom extra line. Real blank
+        // lines remain available in original layout but never shift content
+        // paragraph indexes used by custom layout, search and reading progress.
+        if(/[\r\n]$/.test(text))originalParagraphs.pop();
+        const paragraphs=[],originalParagraphIndexes=originalParagraphs.map(value=>{
+          const trimmed=value.trim();if(!trimmed)return null;
+          const paragraph=paragraphs.length;paragraphs.push(trimmed);return paragraph;
+        });
+        return {paragraphs,originalParagraphs,originalParagraphIndexes,index,title:chapter.title};
       },
       async readResource(){return null;},
       async close(){if(closed)return;closed=true;await handle.close();},
@@ -3032,62 +3195,163 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   const view=document.defaultView;
   const properties=new Set(('font font-family font-size font-style font-weight font-variant font-variant-caps font-stretch line-height text-indent text-align text-align-last text-decoration text-decoration-line text-decoration-style text-decoration-thickness text-underline-offset text-transform letter-spacing word-spacing white-space word-break overflow-wrap hyphens vertical-align margin margin-top margin-right margin-bottom margin-left margin-block margin-block-start margin-block-end margin-inline margin-inline-start margin-inline-end padding padding-top padding-right padding-bottom padding-left padding-block padding-inline border-width border-style border-top-width border-bottom-width border-left-width border-right-width border-radius list-style-type list-style-position display float clear width min-width max-width height min-height max-height box-sizing break-before break-after break-inside page-break-before page-break-after page-break-inside').split(' '));
   let serial=0;
-  const declarations=style=>{
+  // A chapter's virtual html root owns rem sizing. Obsidian's document root
+  // must never determine publisher dimensions or receive publisher styles.
+  const remValue=(value,rootFont=false)=>{
+    let output='',quote='';
+    for(let index=0;index<value.length;) {
+      const char=value[index];
+      if(quote){output+=char;index++;if(char==='\\'&&index<value.length)output+=value[index++];else if(char===quote)quote='';continue;}
+      if(char==='"'||char==="'"){quote=char;output+=char;index++;continue;}
+      const match=(index===0||!/[\w.-]/.test(value[index-1]))&&value.slice(index).match(/^-?(?:\d*\.)?\d+rem\b/i);
+      if(match){const number=Number(match[0].slice(0,-3));output+=rootFont?(number*16)+'px':'calc(var(--wrp-publisher-rem,16px)*'+number+')';index+=match[0].length;}
+      else {output+=char;index++;}
+    }
+    return output;
+  };
+  const declarations=(style,rootFont=false)=>{
     const output=[];
     for(const name of style){
       const value=style.getPropertyValue(name);
       if(!properties.has(name)||value.length>512||/url\s*\(|expression\s*\(|image\s*\(|attr\s*\(|var\s*\(|[<>@]/i.test(value))continue;
       if([...value.matchAll(/(?:^|[^\w-])(-?\d+(?:\.\d+)?)/g)].some(match=>Math.abs(Number(match[1]))>2000))continue;
       if(name==='display'&&!/^(none|block|inline|inline-block|list-item|table|table-row|table-cell|flow-root)$/.test(value))continue;
-      output.push(name+':'+value+(style.getPropertyPriority(name)==='important'?' !important':'')+';');
+      output.push(name+':'+remValue(value,rootFont&&(name==='font-size'||name==='font'))+(style.getPropertyPriority(name)==='important'?' !important':'')+';');
     }
     return output.join('');
   };
-  const inline=raw=>{const node=document.createElement('span');node.style.cssText=String(raw||'').slice(0,4096);return declarations(node.style);};
+  const inline=(raw,rootFont)=>{const node=document.createElement('span');node.style.cssText=String(raw||'').slice(0,4096);return declarations(node.style,rootFont);};
   const attributes=(source,target,record)=>{
     const read=name=>source?.getAttribute?source.getAttribute(name):source?.[name==='class'?'className':name];
     const classes=String(read('class')||'').split(/\s+/).filter(value=>/^[a-zA-Z_][\w-]{0,127}$/.test(value)&&!value.startsWith('wrp-')).slice(0,32).join(' ');
     if(classes)target.dataset.wrpPublisherClass=classes;
     const id=String(read('id')||'').slice(0,128);if(/^[a-zA-Z_][\w-]*$/.test(id))target.dataset.wrpPublisherId=id;
     const lang=String(read('lang')||'').slice(0,32);if(/^[a-zA-Z][a-zA-Z-]*$/.test(lang))target.lang=lang;
-    const value=inline(read('style'));if(value){target.dataset.wrpPublisherNode=String(++serial);record.publisherInline.push([target.dataset.wrpPublisherNode,value,target]);}
+    const value=inline(read('style'),target.hasAttribute('data-wrp-publisher-html'));if(value){target.dataset.wrpPublisherNode=String(++serial);record.publisherInline.push([target.dataset.wrpPublisherNode,value,target]);}
   };
   const selectors=value=>{
-    const result=[];let start=0,depth=0,quote=null;
+    const result=[];let start=0,depth=0,quote='';
     for(let i=0;i<=value.length;i++){
-      const c=value[i];if(quote){if(c===quote&&value[i-1]!=='\\')quote=null;continue;}
+      const c=value[i];if(quote){if(c==='\\')i++;else if(c===quote)quote='';continue;}
       if(c==='"'||c==="'"){quote=c;continue;}if(c==='('||c==='[')depth++;if(c===')'||c===']')depth--;
       if(i===value.length||(c===','&&depth===0)){result.push(value.slice(start,i).trim());start=i+1;}
     }
     return result.filter(Boolean);
   };
   const rewrite=selector=>{
-    if(selector.length>512||/:host|:scope|::part|::slotted|[{}@]/i.test(selector))return null;
-    return selector.replace(/:root\b/g,'[data-wrp-publisher-html]')
-      .replace(/(^|[\s>+~,(])html(?=$|[\s.#:\[>+~,)])/gi,'$1[data-wrp-publisher-html]')
-      .replace(/(^|[\s>+~,(])body(?=$|[\s.#:\[>+~,)])/gi,'$1[data-wrp-publisher-body]')
-      .replace(/#([a-zA-Z_][\w-]*)/g,'[data-wrp-publisher-id="$1"]')
-      .replace(/\.([a-zA-Z_][\w-]*)/g,'[data-wrp-publisher-class~="$1"]')
-      .replace(/\[class(?=[\s~|^$*=\]])/g,'[data-wrp-publisher-class').replace(/\[id(?=[\s~|^$*=\]])/g,'[data-wrp-publisher-id');
+    if(selector.length>512)return null;
+    let output='';
+    for(let index=0;index<selector.length;) {
+      const char=selector[index];
+      if(char==='[') {
+        let end=index+1,quote='';
+        for(;end<selector.length;end++) {
+          const current=selector[end];
+          if(quote){if(current==='\\')end++;else if(current===quote)quote='';}
+          else if(current==='"'||current==="'")quote=current;
+          else if(current===']')break;
+        }
+        if(end>=selector.length)return null;
+        // Rewrite only the attribute name. Dots, hashes, commas and pseudo
+        // names inside quoted values are literal text, not selector tokens.
+        output+=selector.slice(index,end+1).replace(/^(\[\s*)(class|id)(?=[\s~|^$*=\]])/i,(_,prefix,name)=>prefix+'data-wrp-publisher-'+name.toLowerCase());
+        index=end+1;continue;
+      }
+      if(char==='"'||char==="'") {
+        let end=index+1;for(;end<selector.length;end++){if(selector[end]==='\\')end++;else if(selector[end]===char)break;}
+        if(end>=selector.length)return null;output+=selector.slice(index,end+1);index=end+1;continue;
+      }
+      if(char==='\\'){output+=selector.slice(index,index+2);index+=2;continue;}
+      if(/[{}@]/.test(char)||/^(?::host\b|:scope\b|::part\b|::slotted\b)/i.test(selector.slice(index)))return null;
+      const identifier=selector.slice(index+(char==='.'||char==='#'?1:0)).match(/^[a-zA-Z_][\w-]*/);
+      if((char==='.'||char==='#')&&identifier){output+='[data-wrp-publisher-'+(char==='.'?'class~':'id')+'="'+identifier[0]+'"]';index+=identifier[0].length+1;continue;}
+      if(selector.slice(index).match(/^:root\b/i)){output+='[data-wrp-publisher-html]';index+=5;continue;}
+      if(identifier&&(index===0||/[\s>+~,(]/.test(selector[index-1]))&&/^(html|body)$/i.test(identifier[0])){
+        output+='[data-wrp-publisher-'+identifier[0].toLowerCase()+']';index+=identifier[0].length;continue;
+      }
+      output+=char;index++;
+    }
+    return output;
   };
   const compile=(texts,scope,record)=>{
     if(!view?.CSSStyleSheet)return '';
     const prefix='#'+scope;let rules=0,budget=0;
     const visit=list=>{
       let output='';for(const rule of list){if(++rules>2000)break;
-        if(rule.type===1){const body=declarations(rule.style);if(!body)continue;const items=selectors(rule.selectorText).map(rewrite).filter(Boolean).map(value=>prefix+' '+value);if(items.length)output+=items.join(',')+'{'+body+'}\n';}
+        if(rule.type===1){
+          for(const selector of selectors(rule.selectorText)){
+            const value=rewrite(selector);if(!value)continue;let rootFont=false;
+            try {rootFont=!!record.publisherHTML?.matches(value);}catch {continue;}
+            const body=declarations(rule.style,rootFont);if(body)output+=prefix+' '+value+'{'+body+'}\n';
+          }
+        }
         else if((rule.type===4||rule.type===12)&&rule.cssRules){const condition=String(rule.conditionText||'');if(condition.length<=512&&!/[<>@]|url\s*\(/i.test(condition)){const body=visit(rule.cssRules);if(body)output+=(rule.type===4?'@media ':'@supports ')+condition+'{'+body+'}\n';}}
       }return output;
     };
     let output='';for(const text of texts||[]){if(typeof text!=='string'||(budget+=text.length)>524288)break;try{const sheet=new view.CSSStyleSheet();sheet.replaceSync(text);output+=visit(sheet.cssRules);}catch(_){/* A broken publisher rule cannot prevent reading. */}}
     return output;
   };
-  return {attributes,compile};
+  const refresh=record=>{
+    if(!record.publisherRoot?.isConnected||!record.publisherHTML||!view?.getComputedStyle)return;
+    const font=parseFloat(view.getComputedStyle(record.publisherHTML).fontSize);
+    const value=(Number.isFinite(font)&&font>0&&font<=2000?font:16)+'px';
+    if(record.publisherRoot.style.getPropertyValue('--wrp-publisher-rem')!==value)record.publisherRoot.style.setProperty('--wrp-publisher-rem',value);
+  };
+  return {attributes,compile,refresh};
 });
   // WRP_LOCAL_PUBLISHER_END
   const publisherTypography = createLocalPublisherTypography(doc);
   const publisherScopePrefix = "wrp-publisher-" + Math.random().toString(36).slice(2);
   let publisherScopeSerial = 0;
+  // WRP_LOCAL_IMAGE_INFO_START
+  const getLocalImageDimensions = (function getLocalImageDimensions(input, mime) {
+  const bytes = input instanceof ArrayBuffer ? new Uint8Array(input) : ArrayBuffer.isView(input) ? new Uint8Array(input.buffer,input.byteOffset,input.byteLength) : null;
+  if (!bytes || bytes.length < 12) return null;
+  const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const text = (at, length) => String.fromCharCode(...bytes.subarray(at,at+length));
+  const size = (width,height) => Number.isSafeInteger(width) && Number.isSafeInteger(height) && width > 0 && height > 0 ? {width,height} : null;
+  const u24 = at => bytes[at] | bytes[at+1]<<8 | bytes[at+2]<<16;
+  if (mime === 'image/png' && bytes.length >= 24 && data.getUint32(0) === 0x89504e47 && text(12,4) === 'IHDR') return size(data.getUint32(16),data.getUint32(20));
+  if (mime === 'image/gif' && /^GIF8[79]a$/.test(text(0,6))) return size(data.getUint16(6,true),data.getUint16(8,true));
+  if (mime === 'image/bmp' && text(0,2) === 'BM' && bytes.length >= 26) {
+    const dib = data.getUint32(14,true);
+    return dib === 12 ? size(data.getUint16(18,true),data.getUint16(20,true)) : dib >= 40 ? size(data.getInt32(18,true),Math.abs(data.getInt32(22,true))) : null;
+  }
+  if (mime === 'image/jpeg' && bytes[0] === 255 && bytes[1] === 216) {
+    let at = 2;
+    while (at + 4 <= bytes.length) {
+      if (bytes[at++] !== 255) return null;
+      while (bytes[at] === 255) at++;
+      const marker = bytes[at++];
+      if (marker === 217 || marker === 218) return null;
+      if (marker === 1 || marker >= 208 && marker <= 215) continue;
+      if (at + 2 > bytes.length) return null;
+      const length = data.getUint16(at);
+      if (length < 2 || at + length > bytes.length) return null;
+      if ([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker)) return length >= 7 ? size(data.getUint16(at+5),data.getUint16(at+3)) : null;
+      at += length;
+    }
+  }
+  if (mime === 'image/webp' && text(0,4) === 'RIFF' && text(8,4) === 'WEBP') {
+    let at = 12;
+    while (at + 8 <= bytes.length) {
+      const kind = text(at,4), length = data.getUint32(at+4,true), start = at+8;
+      if (start + length > bytes.length) return null;
+      if (kind === 'VP8X' && length >= 10) return size(u24(start+4)+1,u24(start+7)+1);
+      if (kind === 'VP8 ' && length >= 10 && bytes[start+3] === 157 && bytes[start+4] === 1 && bytes[start+5] === 42) return size(data.getUint16(start+6,true)&16383,data.getUint16(start+8,true)&16383);
+      if (kind === 'VP8L' && length >= 5 && bytes[start] === 47) { const bits=data.getUint32(start+1,true); return size((bits&16383)+1,((bits>>>14)&16383)+1); }
+      at = start + length + (length&1);
+    }
+  }
+  if (mime === 'image/avif' && bytes.length >= 24 && text(4,4) === 'ftyp' && /avif|avis/.test(text(8,Math.min(40,bytes.length-8)))) {
+    let largest=null;
+    // ispe is the fixed 20-byte FullBox describing each AVIF image extent.
+    for(let at=4;at+16<=bytes.length;at++) if(text(at,4)==='ispe' && data.getUint32(at-4)===20) { const candidate=size(data.getUint32(at+8),data.getUint32(at+12)); if(candidate&&(!largest||candidate.width*candidate.height>largest.width*largest.height))largest=candidate; }
+    return largest;
+  }
+  return null;
+});
+  // WRP_LOCAL_IMAGE_INFO_END
   const colors = ['#ffd400', '#ff6666', '#5fb236', '#2ea8e5', '#a28ae5'];
   const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,pre,dt,dd,td,th';
   const allowedTags = new Set(['DIV','SECTION','ARTICLE','MAIN','HEADER','FOOTER','FIGURE','FIGCAPTION','P','SPAN','STRONG','EM','B','I','U','S','DEL','SUB','SUP','BR','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE','CODE','OL','UL','LI','DL','DT','DD','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','HR','A']);
@@ -3114,7 +3378,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   // records are discarded rather than cached, so a long book stays inexpensive.
   let book = null, chapter = -1, config = {}, records = new Map();
   let disposed = false, generation = 0, progressTimer = null, frame = null, pendingRestore = null, deferredRestore = null;
-  let catalog = null, imageBytes = 0, lastWheelTurn = 0, maxRenderedChapters = 0, pendingChapterReads = 0;
+  let catalog = null, imageBytes = 0, imagePixels = 0, highlightTimer = null, highlighted = null, ownedHighlight = null, lastWheelTurn = 0, maxRenderedChapters = 0, pendingChapterReads = 0;
   let windowTask = null, windowDirty = false, maintenanceFrame = null, shortWindow = false, shortAdvance = null;
   let chapterNavigation = Promise.resolve(), bookRevision = 0;
   const failedAdjacent = new Set();
@@ -3131,12 +3395,13 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     root.setAttribute('aria-busy', message && !error ? 'true' : 'false');
   };
   const releaseRecord = record => {
+    if (highlighted && record.node.contains(highlighted)) clearHighlight();
     record.alive = false;
-    for (const [url, size] of record.resources) { view?.URL?.revokeObjectURL(url); imageBytes -= size; }
+    for (const [url, resource] of record.resources) { view?.URL?.revokeObjectURL(url); imageBytes -= resource.bytes; imagePixels -= resource.pixels; }
     record.resources.clear(); record.images = []; record.blocks = []; record.paragraphs = [];
     record.publisherTree = []; record.leadingWhitespace = []; record.publisherInline = []; record.publisherRoot?.remove(); record.publisherRoot = null; record.publisherHTML = null; record.publisherStyle = null;
     record.node.remove(); records.delete(record.index);
-    imageBytes = Math.max(0, imageBytes);
+    imageBytes = Math.max(0, imageBytes); imagePixels = Math.max(0, imagePixels);
   };
   const releaseResources = () => { for (const record of [...records.values()]) releaseRecord(record); };
   const welcome = () => {
@@ -3158,20 +3423,21 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     const name = source.getAttribute('id') || (source.tagName === 'A' && source.getAttribute('name'));
     if (name) target.dataset.wrpAnchor = name.slice(0, 512);
   };
-  const sanitize = (node, record) => {
+  const sanitize = (node, record, depth = 0) => {
     if (node.nodeType === 3) return doc.createTextNode(node.nodeValue || '');
     if (node.nodeType !== 1 || forbiddenTags.has(node.tagName)) return null;
+    if (depth > 128) return doc.createTextNode(node.textContent || '');
     if (node.tagName === 'IMG') {
       const holder = element('span', 'wrp-local-image-placeholder', node.getAttribute('alt') ? '图像：' + node.getAttribute('alt') : '图像');
       makeAnchor(node, holder);
       const href = node.getAttribute('src');
-      if (href && safePath(href, record.href) && typeof book?.readResource === 'function' && record.images.length < 100) record.images.push({holder, href, alt:node.getAttribute('alt') || '', publisherAttributes:{className:node.getAttribute('class'),id:node.getAttribute('id'),style:node.getAttribute('style'),lang:node.getAttribute('lang')}, loaded:false});
+      if (href && safePath(href, record.href) && typeof book?.readResource === 'function' && record.images.length < 100) record.images.push({holder, href, alt:node.getAttribute('alt') || '', publisherAttributes:{className:node.getAttribute('class'),id:node.getAttribute('id'),style:node.getAttribute('style'),lang:node.getAttribute('lang'),width:node.getAttribute('width'),height:node.getAttribute('height')}, loaded:false});
       return holder;
     }
     const tag = node.tagName;
     const target = allowedTags.has(tag) ? doc.createElement(tag.toLowerCase()) : doc.createDocumentFragment();
     if (target.nodeType === 1) {
-      makeAnchor(node, target); publisherTypography.attributes(node, target, record);
+      makeAnchor(node, target); if (!record.searchOnly) publisherTypography.attributes(node, target, record);
       if (tag === 'A') {
         const href = node.getAttribute('href');
         if (href && safePath(href, record.href)) {
@@ -3189,27 +3455,27 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     } else if (node.getAttribute('id')) {
       const anchor = element('span', 'wrp-local-anchor'); anchor.dataset.wrpAnchor = node.getAttribute('id').slice(0, 512); target.append(anchor);
     }
-    for (const child of node.childNodes) { const clean = sanitize(child, record); if (clean) target.append(clean); }
+    for (const child of node.childNodes) { const clean = sanitize(child, record, depth + 1); if (clean) target.append(clean); }
     return target;
   };
-  const makeRecord = (payload, index) => {
-    const record = {index, href:payload.href || book.chapters[index]?.href || '', blocks:[], paragraphs:[], titleAnchors:[], images:[], publisherInline:[], leadingWhitespace:[], whitespaceNormalized:false, publisherTree:[], resources:new Map(), alive:true, imageTask:null, node:element('section', 'wrp-local-chapter')};
+  const makeRecord = (payload, index, searchOnly = false) => {
+    const record = {index, searchOnly, href:payload.href || book.chapters[index]?.href || '', blocks:[], paragraphs:[], titleAnchors:[], images:[], publisherInline:[], leadingWhitespace:[], whitespaceNormalized:false, publisherTree:[], resources:new Map(), alive:true, imageTask:null, node:element('section', 'wrp-local-chapter')};
     record.node.dataset.wrpChapter = String(index);
     const holder = element('div');
     if (Array.isArray(payload.paragraphs)) {
       for (const value of Array.isArray(payload.originalParagraphs) ? payload.originalParagraphs : payload.paragraphs) {
         const text = typeof value === 'string' ? value : value?.text;
-        if (typeof text === 'string' && text.trim()) holder.append(element('p', 'wrp-local-text-paragraph', text));
+        if (typeof text === 'string') holder.append(element('p', 'wrp-local-text-paragraph' + (text.trim() ? '' : ' wrp-local-blank wrp-local-txt-blank'), text));
       }
     } else if (typeof payload.html === 'string') {
       // Parse into inert template contents and copy only an allowlist. Author
       // scripts, styling, event handlers and external URLs never become live.
       const template = doc.createElement('template'); template.innerHTML = payload.html;
       const body = template.content.querySelector('body') || template.content;
-      for (const child of body.childNodes) { const clean = sanitize(child, record); if (clean) holder.append(clean); }
+      while (body.firstChild) { const child = body.firstChild, clean = sanitize(child, record); child.remove(); if (clean) holder.append(clean); }
     } else throw new Error('这个章节没有可读取的正文。');
     for (const node of [...holder.querySelectorAll('p,h1,h2,h3,h4,h5,h6,pre,blockquote')]) {
-      if (!node.textContent.trim() && !node.querySelector('.wrp-local-image-placeholder,[data-wrp-anchor]')) node.remove();
+      if (!node.textContent.trim() && !node.querySelector('.wrp-local-image-placeholder')) node.classList.add('wrp-local-blank');
     }
     const wrappers = new Set(['DIV','SECTION','ARTICLE','MAIN','HEADER','FOOTER','FIGURE','FIGCAPTION']);
     const collectBlocks = parent => {
@@ -3223,22 +3489,26 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
       }
     };
     collectBlocks(holder);
+    record.nodeCount = holder.querySelectorAll('*').length;
+    if (!searchOnly) {
     record.publisherRoot = element('div','wrp-local-publisher');
     record.publisherRoot.id = publisherScopePrefix + '-' + (++publisherScopeSerial);
     record.publisherHTML = element('wrp-publisher-html'); record.publisherHTML.dataset.wrpPublisherHtml = '';
     const publisherBody = element('wrp-publisher-body'); publisherBody.dataset.wrpPublisherBody = '';
     publisherTypography.attributes(payload.publisherHtml,record.publisherHTML,record);
     publisherTypography.attributes(payload.publisherBody,publisherBody,record);
-    publisherBody.append(...holder.childNodes); record.publisherHTML.append(publisherBody);
+    publisherBody.append(holder); while(holder.firstChild) publisherBody.insertBefore(holder.firstChild,holder); holder.remove(); record.publisherHTML.append(publisherBody);
     record.publisherRoot.append(record.publisherHTML);
     record.publisherRoot.classList.toggle('is-txt',Array.isArray(payload.paragraphs));
     for (const parent of [record.publisherHTML,publisherBody,...publisherBody.querySelectorAll('div,section,article,main,header,footer,figure,figcaption')]) record.publisherTree.push([parent,[...parent.childNodes]]);
     record.publisherStyle = element('style'); record.publisherStyle.textContent = publisherTypography.compile(payload.publisherStyles,record.publisherRoot.id,record);
-    record.publisherHasHeading = /^H[1-6]$/.test(record.blocks[0]?.tagName || '');
-    const first = record.blocks[0];
+        }
+    const firstIndex = record.blocks.findIndex(node => !node.classList.contains('wrp-local-blank'));
+    const first = record.blocks[firstIndex];
+    record.publisherHasHeading = /^H[1-6]$/.test(first?.tagName || '');
     const normalizedHeading = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
     if (first?.nodeType === 1 && /^H[1-6]$/.test(first.tagName) && normalizedHeading(first.textContent) === normalizedHeading(book.chapters[index]?.title || '第 ' + (index + 1) + ' 章')) {
-      record.titleAnchors = [first, ...first.querySelectorAll('[data-wrp-anchor]')].map(node => node.dataset.wrpAnchor).filter(Boolean); record.blocks.shift();
+      record.titleAnchors = [first, ...first.querySelectorAll('[data-wrp-anchor]')].map(node => node.dataset.wrpAnchor).filter(Boolean); record.blocks.splice(firstIndex,1);
     }
     // Remember just leading whitespace. Switching typography neither clones
     // paragraphs nor duplicates their text, and original indent remains recoverable.
@@ -3255,7 +3525,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     }
     record.paragraphs = record.blocks.flatMap(block => {
       const candidates = block.matches(blockSelector) ? [block, ...block.querySelectorAll(blockSelector)] : [...block.querySelectorAll(blockSelector)];
-      const leaves = candidates.filter(node => !node.querySelector(blockSelector)); return leaves.length ? leaves : [block];
+      const leaves = candidates.filter(node => !node.querySelector(blockSelector) && !node.classList.contains('wrp-local-blank')); return leaves.length ? leaves : block.classList.contains('wrp-local-blank') ? [] : [block];
     });
     record.paragraphs.forEach((node, number) => { node.dataset.wrpParagraph = String(number); });
     return record;
@@ -3280,7 +3550,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     }
     for (const [,value,target] of record.publisherInline) { if (publisher) target.style.cssText = value; else target.removeAttribute("style"); }
     if (publisher) {
-      for (const [parent,children] of record.publisherTree) parent.replaceChildren(...children);
+      for (const [parent,children] of record.publisherTree) { parent.replaceChildren(); for (const child of children) parent.appendChild(child); }
       record.publisherRoot.replaceChildren(record.publisherStyle,record.publisherHTML);
     }
     if (!continuous() && index > 0) { const previous = element('nav', 'wrp-local-chapter-nav is-previous'); previous.append(chapterButton(index - 1, '上一章')); node.append(previous); }
@@ -3311,7 +3581,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   const renderBody = () => {
     content.replaceChildren(); root.classList.toggle('is-literature', !!config.literature?.enabled); root.classList.toggle('is-continuous', continuous()); root.classList.toggle('is-publisher', publisherMode());
     if (!book || chapter < 0) { welcome(); return; }
-    for (const record of sortedRecords()) { renderRecord(record); content.append(record.node); }
+    for (const record of sortedRecords()) { renderRecord(record); content.append(record.node); if(publisherMode()) publisherTypography.refresh?.(record); }
   };
 
   const paragraphTop = node => node.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
@@ -3381,13 +3651,14 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     if (!node) return false;
     scroll.scrollTop = Math.max(0, paragraphTop(node) - (node.closest('.wrp-local-title-anchors') ? 0 : 8)); captureProgress(); return true;
   };
+  const imageIsNear = request => { const bounds = request.holder.getBoundingClientRect(), area = scroll.getBoundingClientRect(); return request.holder.isConnected && scroll.clientHeight > 0 && bounds.bottom >= area.top - scroll.clientHeight && bounds.top <= area.bottom + scroll.clientHeight; };
   const loadImages = (record, token) => {
     if (record.imageTask && record.imageToken === token) return record.imageTask;
     record.imageToken = token;
     const currentBook = book;
     const run = async () => {
       for (const request of record.images) {
-        if (request.loaded) continue;
+        if (request.loaded || !imageIsNear(request)) continue;
         if (disposed || generation !== token || currentBook !== book || !record.alive) return;
         try {
           const resource = await currentBook.readResource(request.href, record.index);
@@ -3396,9 +3667,14 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
           if (!resource || !/^image\/(?:png|jpeg|gif|webp|avif|bmp)$/i.test(resource.mime || '')) continue;
           const size = resource.data?.byteLength ?? resource.data?.size ?? 0;
           if (!size || size > 8 * 1024 * 1024 || imageBytes + size > 24 * 1024 * 1024 || !view?.URL?.createObjectURL) continue;
+          const dimensions = getLocalImageDimensions(resource.data,resource.mime), pixels = dimensions ? dimensions.width * dimensions.height : 0;
+          if (!pixels || pixels > 12000000 || imagePixels + pixels > 24000000) { request.holder.textContent = request.alt ? '图像：' + request.alt : '图像过大，暂不显示'; continue; }
           const progress = captureProgress(), blob = new view.Blob([resource.data], {type:resource.mime});
-          const url = view.URL.createObjectURL(blob); record.resources.set(url, size); imageBytes += size;
-          const image = element('img', 'wrp-local-image'); if(request.holder.dataset.wrpAnchor)image.dataset.wrpAnchor=request.holder.dataset.wrpAnchor; publisherTypography.attributes(request.publisherAttributes,image,record);
+          const url = view.URL.createObjectURL(blob); record.resources.set(url, {bytes:size,pixels}); imageBytes += size; imagePixels += pixels;
+          const image = element('img', 'wrp-local-image'); if(request.holder.dataset.wrpAnchor)image.dataset.wrpAnchor=request.holder.dataset.wrpAnchor; const attrs = {...request.publisherAttributes};
+          let sizeStyle = '';
+          for (const name of ['width','height']) { const value = Number(attrs[name]); if (Number.isFinite(value) && value > 0 && value <= 50000) { image.setAttribute(name,String(value)); sizeStyle += name + ':' + value + 'px;'; } }
+          attrs.style = sizeStyle + (attrs.style || ''); publisherTypography.attributes(attrs,image,record);
           if (publisherMode()) { const inline = record.publisherInline.find(value=>value[2]===image); if(inline)image.style.cssText=inline[1]; }
           image.alt = request.alt; image.decoding = 'async'; image.loading = 'lazy';
           image.addEventListener('load', () => { if (generation === token && !disposed && record.alive) queueRestore({...remembered}); }, {once:true});
@@ -3424,6 +3700,8 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
       if (disposed || token !== generation || currentBook !== book || !continuous()) return;
       clearQueuedRestore(true);
       const progress = captureProgress(); keepWindow(progress.chapter); restoreProgress(progress);
+      // Large chapters remain readable without also retaining two large neighbors.
+      if ((records.get(progress.chapter)?.nodeCount || 0) > 12000) return;
       // Forward comes first, so reaching the next chapter needs no reload.
       if (shortWindow && records.get(progress.chapter)?.node.getBoundingClientRect().height >= scroll.clientHeight) shortWindow = false;
       for (const index of shortWindow ? [progress.chapter + 1] : [progress.chapter + 1, progress.chapter - 1]) {
@@ -3435,6 +3713,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
           continue;
         }
         if (!record) return;
+        if ([...records.values()].reduce((n,r)=>n+r.nodeCount,0) + record.nodeCount > 20000) { record.alive = false; continue; }
         clearQueuedRestore(true);
         const anchor = captureProgress();
         if (!continuous() || Math.abs(record.index - anchor.chapter) > 1) { record.alive = false; windowDirty = true; continue; }
@@ -3442,7 +3721,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
         keepWindow(anchor.chapter);
         if (!records.has(record.index)) {
           records.set(record.index, record); renderRecord(record);
-          const following = sortedRecords().find(item => item.index > record.index); content.insertBefore(record.node, following?.node || null);
+          const following = sortedRecords().find(item => item.index > record.index); content.insertBefore(record.node, following?.node || null); publisherTypography.refresh?.(record);
           maxRenderedChapters = Math.max(maxRenderedChapters, records.size);
           restoreProgress(anchor); void loadImages(record, token);
         }
@@ -3468,7 +3747,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   };
   const onScroll = () => {
     if (!book || chapter < 0 || pendingRestore) return;
-    captureProgress(); scheduleWindow();
+    captureProgress(); scheduleWindow(); for (const record of records.values()) void loadImages(record,generation);
     if (progressTimer != null) clearTimeout(progressTimer); progressTimer = setTimeout(emitProgress, 180);
   };
   const closeCatalog = () => { if (catalog) { catalog.remove(); catalog = null; } };
@@ -3513,7 +3792,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   };
   const setBook = async (nextBook, progress) => {
     if (disposed) return false;
-    if (book && chapter >= 0) emitProgress(); clearQueuedRestore(false); cancelMaintenance();
+    if (book && chapter >= 0) emitProgress(); clearHighlight(); clearQueuedRestore(false); cancelMaintenance();
     ++generation; ++bookRevision; chapterNavigation = Promise.resolve(); releaseResources(); closeCatalog(); book = nextBook || null; chapter = -1; maxRenderedChapters = 0; shortWindow = false; deferredRestore = null;
     remembered = {chapter:0, paragraph:0, offset:0, percent:0}; content.replaceChildren(); scroll.scrollTop = 0;
     if (!book) { showStatus(''); welcome(); return true; }
@@ -3541,6 +3820,7 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
       for (const record of records.values()) void loadImages(record, generation);
     } else if (regroup && book && chapter >= 0) renderBody();
     root.classList.toggle('is-literature', !!literature.enabled); root.classList.toggle('is-continuous', continuous()); root.classList.toggle('is-publisher', publisherMode());
+    if (publisherMode()) for (const record of records.values()) publisherTypography.refresh?.(record);
     if (continuous() && book && records.has(progress.chapter)) {
       // Appearance can first be supplied after setBook, or shrink a chapter
       // beneath the viewport. Prepending then clamps scrollTop into the prior
@@ -3689,14 +3969,68 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
   scroll.addEventListener('scroll', onScroll, {passive:true}); scroll.addEventListener('wheel', onWheel, {passive:false});
   root.addEventListener('click', onClick); root.addEventListener('keydown', onKeyDown); root.addEventListener('pointerdown', onPointerDown);
   const resizeObserver = view?.ResizeObserver ? new view.ResizeObserver(() => {
-    if (disposed) return; invoke('onResize'); updateGutter(); if (book && scroll.clientHeight) queueRestore(pendingRestore || {...remembered});
+    if (disposed) return; invoke('onResize'); updateGutter(); if(publisherMode()) for(const record of records.values()) publisherTypography.refresh?.(record); if (book && scroll.clientHeight) queueRestore(pendingRestore || {...remembered});
   }) : null;
   resizeObserver?.observe(scroll); welcome();
+  const clearHighlight = () => {
+    clearTimeout(highlightTimer); highlightTimer=null;
+    highlighted?.classList.remove('wrp-local-search-hit'); highlighted=null;
+    if(ownedHighlight && view.CSS?.highlights?.get('wrp-local-search-match')===ownedHighlight) view.CSS.highlights.delete('wrp-local-search-match');
+    ownedHighlight=null;
+  };
+  const matchRange = (node,start,length) => {
+    if(!Number.isInteger(start)||start<0||!Number.isInteger(length)||length<=0)return null;
+    const walker=doc.createTreeWalker(node,4), end=start+length;
+    let text,position=0,previousSpace=true,first=null,last=null;
+    while((text=walker.nextNode())) {
+      if(text.parentElement.closest('.wrp-local-image-placeholder,.wrp-local-image'))continue;
+      for(let offset=0;offset<text.nodeValue.length;offset++) {
+        const whitespace=/\s/.test(text.nodeValue[offset]);
+        if(whitespace && previousSpace)continue;
+        previousSpace=whitespace;
+        if(position===start)first=[text,offset];
+        if(position===end-1){last=[text,offset+1];break;}
+        position++;
+      }
+      if(last)break;
+    }
+    if(!first||!last)return null;
+    const range=doc.createRange();range.setStart(...first);range.setEnd(...last);return range;
+  };
+  const navigateToProgress = async (progress,tools={}) => {
+    if(!book||disposed)return false;
+    const expectedBook=book,revision=bookRevision;clearHighlight();
+    const result=await navigate(progress?.chapter,null,progress);
+    if(!result||disposed||book!==expectedBook||bookRevision!==revision)return false;
+    clearQueuedRestore(false);restoreProgress(progress);
+    const record=records.get(Number(progress?.chapter)),node=record?.paragraphs[Number(progress?.paragraph)||0];
+    if(tools.highlight && node) {
+      highlighted=node;
+      const range=matchRange(node,tools.matchStart,tools.matchLength);
+      if(range && view.CSS?.highlights && view.Highlight) { ownedHighlight=new view.Highlight(range);view.CSS.highlights.set('wrp-local-search-match',ownedHighlight); }
+      else node.classList.add('wrp-local-search-hit');
+      if(range) {const box=range.getBoundingClientRect(),area=scroll.getBoundingClientRect();if(box.height)scroll.scrollTop+=box.top-area.top-8;}
+      highlightTimer=setTimeout(clearHighlight,2500);
+      remembered=captureProgress();queueRestore(remembered);
+    } else queueRestore(progress);
+    emitProgress();scheduleWindow();return true;
+  };
+  const getSearchParagraphs = (payload,index) => {
+    if (disposed || !book) return []; const record = makeRecord(payload,index,true);
+    const texts = record.paragraphs.map(node=>{
+      if(!node.matches('.wrp-local-image-placeholder,.wrp-local-image')&&!node.querySelector('.wrp-local-image-placeholder,.wrp-local-image'))return node.textContent.replace(/\s+/g,' ').trim();
+      if(node.matches('.wrp-local-image-placeholder,.wrp-local-image'))return '';
+      const copy=node.cloneNode(true);for(const image of copy.querySelectorAll('.wrp-local-image-placeholder,.wrp-local-image'))image.remove();return copy.textContent.replace(/\s+/g,' ').trim();
+    });
+    record.blocks = []; record.paragraphs = []; record.images = []; record.node.remove(); return texts;
+  };
   return {
+    navigateToProgress, getSearchParagraphs,
+    getParagraphText(index, paragraph, maximum=120) { return String(records.get(index)?.paragraphs[paragraph]?.textContent || '').replace(/\s+/g,' ').trim().slice(0,Math.max(0,Math.min(500,maximum))); },
     setBook, applyAppearance, navigate, turn, scrollByDirection, navigateChapter, captureProgress, openCatalog,
     preserveProgress() { if (!disposed && book && records.size) queueRestore(captureProgress()); },
     destroy() {
-      if (disposed) return; emitProgress(); disposed = true; ++generation; ++bookRevision;
+      if (disposed) return; clearHighlight(); emitProgress(); disposed = true; ++generation; ++bookRevision;
       if (progressTimer != null) clearTimeout(progressTimer); clearQueuedRestore(false); cancelMaintenance();
       resizeObserver?.disconnect(); releaseResources(); closeCatalog(); scroll.removeEventListener('scroll', onScroll); scroll.removeEventListener('wheel', onWheel);
       root.removeEventListener('click', onClick); root.removeEventListener('keydown', onKeyDown); root.removeEventListener('pointerdown', onPointerDown); root.remove(); book = null; deferredRestore = null;
@@ -3704,11 +4038,68 @@ const createLocalReaderSurface = (function createLocalReaderSurface(options) {
     get root() { return root; },
     get book() { return book; },
     get chapter() { return chapter; },
-    get stats() { return {renderedChapters:records.size, maxRenderedChapters, maxChapters, chapterIndexes:sortedRecords().map(record => record.index), imageBytes, pendingChapterReads, awaitingLayout:!!deferredRestore, continuous:continuous()}; }
+    get stats() { return {renderedChapters:records.size, maxRenderedChapters, maxChapters, chapterIndexes:sortedRecords().map(record => record.index), imageBytes, imagePixels, renderedNodes:[...records.values()].reduce((n,r)=>n+r.nodeCount,0), pendingChapterReads, awaitingLayout:!!deferredRestore, continuous:continuous()}; }
   };
 });
+const createLocalBookSearch = (function createLocalBookSearch(options = {}) {
+  const maxResults = Math.max(1, Math.min(500, Math.floor(Number(options.maxResults) || 200)));
+  const maxQuery = 256, context = 64;
+  let revision = 0, disposed = false;
+  const notify = (name, value) => { try { options[name]?.(value); } catch (_) { /* Closing a results view cannot interrupt a read. */ } };
+  const yieldTask = options.yieldTask || (() => new Promise(resolve => setTimeout(resolve, 0)));
+  const cancel = () => { revision++; };
+  const search = async raw => {
+    const token = ++revision, book = options.getBook?.(), query = String(raw || '').replace(/\s+/g,' ').trim().slice(0, maxQuery);
+    const results = [], failures = [];
+    let processed = 0, failedChapters = 0, truncated = false;
+    const total = Array.isArray(book?.chapters) ? book.chapters.length : 0;
+    const current = () => !disposed && token === revision && options.getBook?.() === book && options.isCurrent?.() !== false;
+    const state = done => ({query, processed, total, count:results.length, failedChapters, truncated, done});
+    if (!query || !total || typeof book.readChapter !== 'function' || typeof options.extractParagraphs !== 'function') return {...state(true), results, failures, canceled:false};
+    const pattern = new RegExp(query.replace(/[\^$.*+?()[\]{}|\\]/g, character => '\\' + character), 'giu');
+    if(!current()) return {...state(false), results:[], failures:[], canceled:true};
+    notify('onProgress', state(false));
+    for (let chapter = 0; chapter < total; chapter++) {
+      if (!current()) return {...state(false), results:[], failures:[], canceled:true};
+      // A payload and its extracted strings are confined to one iteration. Only
+      // bounded context snippets enter the result list; no full-book index lives here.
+      const beforeCount=results.length;
+      try {
+        const payload = await book.readChapter(chapter);
+        if (!current()) return {...state(false), results:[], failures:[], canceled:true};
+        const paragraphs = await options.extractParagraphs(payload, chapter, book);
+        if (!current()) return {...state(false), results:[], failures:[], canceled:true};
+        if (!Array.isArray(paragraphs)) throw new Error('章节文字无法识别');
+        for (let paragraph = 0; paragraph < paragraphs.length && results.length < maxResults; paragraph++) {
+          const value = String(paragraphs[paragraph] ?? '');pattern.lastIndex=0;let match;
+          while (results.length < maxResults && (match = pattern.exec(value))) {
+            const start=match.index, end=start+match[0].length;
+            results.push({chapter, paragraph, matchStart:start, matchLength:match[0].length,
+              before:(start > context ? '…' : '') + value.slice(Math.max(0, start - context), start),
+              match:match[0], after:value.slice(end, end + context) + (end + context < value.length ? '…' : '')});
+          }
+        }
+      } catch (error) {
+        if (!current()) return {...state(false), results:[], failures:[], canceled:true};
+        failedChapters++;
+        if (failures.length < 20) failures.push({chapter, message:String(error?.message || '章节读取失败').slice(0, 160)});
+      }
+      processed = chapter + 1;
+      if (results.length >= maxResults) truncated = true;
+      if(results.length!==beforeCount)notify('onResults', results.slice());
+      notify('onProgress', state(false));
+      if (truncated) break;
+      await yieldTask();
+    }
+    if (!current()) return {...state(false), results:[], failures:[], canceled:true};
+    const result = {...state(true), results, failures, canceled:false};
+    notify('onProgress', state(true));
+    return result;
+  };
+  return {search, cancel, destroy(){disposed = true;cancel();}, get maxResults(){return maxResults;}};
+});
 const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
-  const {Modal, Setting, Notice, Menu, createLocalBookStore, createLocalReaderSurface} = dependencies;
+  const {Modal, Setting, Notice, Menu, createLocalBookStore, createLocalReaderSurface, createLocalBookSearch} = dependencies;
   const supported = /\.(epub|txt)$/i;
   const libraryFolder = 'WeRead Pocket';
   let nodePath, fileSystem;
@@ -3778,6 +4169,12 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
   }
   const idFor = path => require('crypto').createHash('sha256').update(require('path').resolve(path).toLowerCase()).digest('hex').slice(0,24);
   const progressOf = value => ({chapter:Math.max(0,Math.floor(Number(value?.chapter)||0)),paragraph:Math.max(0,Math.floor(Number(value?.paragraph)||0)),offset:Math.max(0,Math.min(1,Number(value?.offset)||0)),percent:Math.max(0,Math.min(100,Number(value?.percent)||0))});
+  const bookmarkLimit = 500;
+  const bookmarksOf = values => (Array.isArray(values) ? values : []).slice(0, bookmarkLimit).filter(value => value && typeof value.id === 'string' && /^[a-f0-9]{24}$/i.test(value.id)).map(value => {
+    const finite = (number, maximum) => Number.isFinite(Number(number)) ? Math.max(0, Math.min(maximum, Number(number))) : 0;
+    return {id:value.id, chapter:Math.floor(finite(value.chapter, 10000000)), paragraph:Math.floor(finite(value.paragraph, 10000000)), offset:finite(value.offset, 1), percent:finite(value.percent, 100),
+      name:String(value.name || '').slice(0, 120), excerpt:String(value.excerpt || '').slice(0, 160), createdAt:finite(value.createdAt, 8640000000000000)};
+  });
   function normalizeLibrary(settings) {
     initializeNode();
     const seen = new Set();
@@ -3785,7 +4182,7 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
       const id = preserveId(entry.id,entry.path), key=canonical(entry.path);
       if(seen.has(key)) return null;
       seen.add(key);
-      return {id,path:entry.path,sourcePath:typeof entry.sourcePath==='string'&&supported.test(entry.sourcePath)&&entry.sourcePath.length<32768?entry.sourcePath:'',title:String(entry.title||require('path').basename(entry.path)).slice(0,240),author:String(entry.author||'').slice(0,240),format:/\.epub$/i.test(entry.path)?'EPUB':'TXT',addedAt:Number(entry.addedAt)||Date.now(),lastOpened:Number(entry.lastOpened)||0,progress:progressOf(entry.progress)};
+      return {id,path:entry.path,sourcePath:typeof entry.sourcePath==='string'&&supported.test(entry.sourcePath)&&entry.sourcePath.length<32768?entry.sourcePath:'',title:String(entry.title||require('path').basename(entry.path)).slice(0,240),author:String(entry.author||'').slice(0,240),format:/\.epub$/i.test(entry.path)?'EPUB':'TXT',addedAt:Number(entry.addedAt)||Date.now(),lastOpened:Number(entry.lastOpened)||0,progress:progressOf(entry.progress),bookmarks:bookmarksOf(entry.bookmarks)};
     }).filter(Boolean);
     settings.localTypography = settings.localTypography === 'custom' ? 'custom' : 'publisher';
     settings.continuousChapters = settings.continuousChapters!==false;
@@ -3837,6 +4234,65 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
     }
     onClose() {this.plugin.localShelfModal=null;this.contentEl.empty();}
   }
+  class LocalBookmarks extends (Modal || class {}) {
+    constructor(plugin) {super(plugin.app);this.plugin=plugin;this.entry=plugin.localEntry;}
+    onOpen() {this.modalEl?.addClass('wrp-local-tools-modal');this.render();}
+    render() {
+      const p=this.plugin, entry=this.entry, el=this.contentEl;
+      if(p.localEntry!==entry||!p.canUseLocalTools()){this.close();return;}
+      el.empty();el.addClass('wrp-local-tools');el.createEl('h2',{text:'本书书签'});el.createEl('p',{cls:'wrp-local-tools-book',text:entry.title});
+      const controls=el.createDiv({cls:'wrp-local-tools-controls'}),add=controls.createEl('button',{text:'添加当前位置',attr:{type:'button'}});
+      add.addEventListener('click',()=>{p.addLocalBookmark();this.render();});
+      const list=el.createDiv({cls:'wrp-local-tools-list',attr:{role:'list','aria-label':'本书书签'}}),bookmarks=bookmarksOf(entry.bookmarks);
+      if(!bookmarks.length)list.createEl('p',{cls:'wrp-local-tool-empty',text:'还没有书签。添加当前位置后，可随时回来。'});
+      for(const bookmark of bookmarks.slice().reverse()) {
+        const row=list.createDiv({cls:'wrp-local-tool-row',attr:{role:'listitem'}}),jump=row.createEl('button',{cls:'wrp-local-tool-jump',attr:{type:'button','aria-label':'跳转到书签：'+bookmark.name}});
+        jump.createSpan({cls:'wrp-local-tool-meta',text:bookmark.name||'第 '+(bookmark.chapter+1)+' 章'});jump.createSpan({cls:'wrp-local-tool-excerpt',text:bookmark.excerpt||'已读 '+Math.round(bookmark.percent)+'%'});
+        jump.addEventListener('click',async()=>{jump.disabled=true;try{if(p.localEntry===entry&&await p.jumpToLocalPosition(bookmark))this.close();}finally{if(jump.isConnected)jump.disabled=false;}});
+        const remove=row.createEl('button',{text:'移除',attr:{type:'button','aria-label':'移除书签：'+bookmark.name}});remove.addEventListener('click',()=>{p.removeLocalBookmark(entry.id,bookmark.id);this.render();});
+      }
+    }
+    onClose(){if(this.plugin.localToolsModal===this){this.plugin.cancelLocalToolNavigation();this.plugin.localToolsModal=null;}this.contentEl.empty();}
+  }
+  class LocalSearch extends (Modal || class {}) {
+    constructor(plugin) {super(plugin.app);this.plugin=plugin;this.entry=plugin.localEntry;this.book=plugin.localBook;this.running=false;this.results=[];}
+    onOpen() {
+      const p=this.plugin,el=this.contentEl;this.modalEl?.addClass('wrp-local-tools-modal');el.empty();el.addClass('wrp-local-tools');
+      el.createEl('h2',{text:'搜索本书'});el.createEl('p',{cls:'wrp-local-tools-book',text:this.entry.title});
+      const form=el.createEl('form',{cls:'wrp-local-tools-controls'});
+      this.input=form.createEl('input',{type:'search',attr:{placeholder:'输入正文中的文字','aria-label':'搜索本书正文',maxlength:'256',autocomplete:'off'}});
+      const submit=form.createEl('button',{text:'搜索',attr:{type:'submit'}});submit.addClass('mod-cta');
+      this.cancelButton=form.createEl('button',{text:'停止',attr:{type:'button'}});this.cancelButton.hidden=true;
+      this.status=el.createEl('p',{cls:'wrp-local-tools-status',text:'逐章搜索正文，最多显示 200 条结果。',attr:{role:'status','aria-live':'polite'}});
+      this.list=el.createDiv({cls:'wrp-local-tools-list',attr:{role:'list','aria-label':'正文搜索结果'}});
+      this.search=createLocalBookSearch({getBook:()=>p.localBook,isCurrent:()=>p.canUseLocalTools()&&p.localEntry===this.entry&&this.contentEl.isConnected,
+        extractParagraphs:(payload,index)=>p.localReader.getSearchParagraphs(payload,index),
+        onResults:results=>{this.results=results;this.renderResults();},onProgress:value=>{
+          const end=value.done?(value.truncated?'已显示前 200 条结果。':'搜索完成。'):('已搜索 '+value.processed+'/'+value.total+' 章，');
+          this.status.setText(end+'找到 '+value.count+' 条'+(value.failedChapters?'；'+value.failedChapters+' 章未能读取':'')+(value.done?'':'。'));
+        }});
+      form.addEventListener('submit',event=>{event.preventDefault();void this.runSearch();});
+      this.cancelButton.addEventListener('click',()=>{this.search.cancel();this.running=false;this.cancelButton.hidden=true;this.status.setText('已停止，保留已找到的 '+this.results.length+' 条结果。');});
+      this.input.focus();
+    }
+    async runSearch() {
+      const query=this.input.value.replace(/\s+/g,' ').trim();this.plugin.cancelLocalToolNavigation();this.search.cancel();this.results=[];this.list.empty();
+      if(!query){this.running=false;this.cancelButton.hidden=true;this.status.setText('请输入要查找的正文文字。');return;}
+      const revision=(this.queryRevision||0)+1;this.queryRevision=revision;this.query=query;this.running=true;this.cancelButton.hidden=false;
+      try {const result=await this.search.search(query);if(this.queryRevision!==revision||!this.contentEl.isConnected||result.canceled)return;this.running=false;this.cancelButton.hidden=true;if(!result.count)this.list.createEl('p',{cls:'wrp-local-tool-empty',text:result.failedChapters?'已读取的章节中没有匹配文字。':'本书正文中没有匹配文字。'});}
+      catch(error){if(this.contentEl.isConnected&&this.queryRevision===revision){this.running=false;this.cancelButton.hidden=true;this.status.setText('搜索失败：'+error.message);}}
+    }
+    renderResults() {
+      this.list.empty();const p=this.plugin;
+      for(const result of this.results) {
+        const row=this.list.createDiv({cls:'wrp-local-tool-row',attr:{role:'listitem'}}),jump=row.createEl('button',{cls:'wrp-local-tool-jump',attr:{type:'button'}});
+        jump.createSpan({cls:'wrp-local-tool-meta',text:this.book.chapters[result.chapter]?.title||'第 '+(result.chapter+1)+' 章'});
+        const excerpt=jump.createSpan({cls:'wrp-local-tool-excerpt'});excerpt.appendText(result.before);excerpt.createEl('mark',{text:result.match});excerpt.appendText(result.after);
+        jump.addEventListener('click',async()=>{jump.disabled=true;try{if(p.localEntry===this.entry&&p.localBook===this.book&&await p.jumpToLocalPosition({chapter:result.chapter,paragraph:result.paragraph,offset:0},{highlight:this.query,matchStart:result.matchStart,matchLength:result.matchLength}))this.close();}finally{if(jump.isConnected)jump.disabled=false;}});
+      }
+    }
+    onClose(){this.queryRevision=(this.queryRevision||0)+1;this.search?.destroy();this.results=[];if(this.plugin.localToolsModal===this){this.plugin.cancelLocalToolNavigation();this.plugin.localToolsModal=null;}this.contentEl.empty();}
+  }
   const original={};
   const wrap=(name,handler)=>{original[name]=Pocket.prototype[name];Pocket.prototype[name]=function(...args){return handler.call(this,original[name],...args);};};
   Pocket.prototype.isLocalSource=function(){return this.settings?.readingSource==='local';};
@@ -3862,14 +4318,14 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
     this.localClosedBooks.add(book);return Promise.resolve().then(()=>book.close()).catch(()=>{});
   };
   Pocket.prototype.releaseLocalSource=function(){
-    this.captureLocalProgress();this.localOpenRevision++;this.localOpening=false;
+    this.closeLocalTools();this.captureLocalProgress();this.localOpenRevision++;this.localOpening=false;
     const reader=this.localReader,books=[this.localBook,this.localPendingPreviousBook];
     this.localReader=null;this.localBook=null;this.localEntry=null;this.localPendingPreviousBook=null;
     this.localReaderCleanup?.();this.localReaderCleanup=null;reader?.destroy();
     this.nativeFontReady=false;
     for(const book of books)void this.closeLocalBook(book);
   };
-  Pocket.prototype.updateLocalSourceVisibility=function(){this.readingSurface?.setAttribute('data-wrp-source',this.isLocalSource()?'local':'weread');};
+  Pocket.prototype.updateLocalSourceVisibility=function(){this.readingSurface?.setAttribute('data-wrp-source',this.isLocalSource()?'local':'weread');if(this.localToolsButton)this.localToolsButton.hidden=!this.isLocalSource();};
   Pocket.prototype.initializeLocalLibrary=function(){
     if(this.localLibraryInitialization)return this.localLibraryInitialization;
     this.localLibraryInitialization=(async()=>{
@@ -3998,6 +4454,7 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
   Pocket.prototype.openLocalBook=async function(id,force=false){
     const entry=this.settings.localBooks.find(book=>book.id===id);
     if(!entry){new Notice('请先从本地书架选择一本书');return false;}
+    if(this.localEntry!==entry||force)this.closeLocalTools();
     const token=++this.localOpenRevision;
     const startupSource=!this.panel?this.settings.readingSource:null;
     if(!this.panel){this.settings.readingSource='local';this.build();}
@@ -4088,6 +4545,28 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
     if(this.message)this.message.setText(title);
     if(this.readerView?.titleEl){this.readerView.headerData={title,addLabel:'',addDisabled:true};this.readerView.titleEl.setText(title);this.readerView.titleEl.title=title;this.readerView.addShelfButton.hidden=true;}
   };
+  Pocket.prototype.canUseLocalTools=function(){return !this.unloaded&&this.isLocalSource()&&this.ready&&!this.localOpening&&!!this.localEntry&&!!this.localBook&&!!this.localReader&&this.localReader.book===this.localBook;};
+  Pocket.prototype.cancelLocalToolNavigation=function(){this.localToolNavigationRevision=(this.localToolNavigationRevision||0)+1;};
+  Pocket.prototype.closeLocalTools=function(){this.cancelLocalToolNavigation();this.localToolsModal?.close();this.localToolsModal=null;};
+  Pocket.prototype.addLocalBookmark=function(){
+    if(!this.canUseLocalTools()){new Notice('请先打开一本本地图书');return false;}
+    const entry=this.localEntry,position=progressOf(this.localReader.captureProgress()),bookmarks=bookmarksOf(entry.bookmarks);
+    const existing=bookmarks.find(value=>value.chapter===position.chapter&&value.paragraph===position.paragraph&&Math.abs(value.offset-position.offset)<.02);
+    if(existing){new Notice('这个位置已有书签');return existing;}
+    if(bookmarks.length>=bookmarkLimit){new Notice('本书已有 500 个书签，请先移除不需要的书签');return false;}
+    const bookmark={id:require('crypto').randomBytes(12).toString('hex'),...position,name:String(this.localBook.chapters[position.chapter]?.title||'第 '+(position.chapter+1)+' 章').slice(0,120),
+      excerpt:String(this.localReader.getParagraphText?.(position.chapter,position.paragraph,160)||'').slice(0,160),createdAt:Date.now()};
+    entry.bookmarks=[...bookmarks,bookmark];this.persist();new Notice('已添加当前位置书签');return bookmark;
+  };
+  Pocket.prototype.removeLocalBookmark=function(bookId,bookmarkId){const entry=this.settings.localBooks.find(book=>book.id===bookId);if(!entry)return false;const before=bookmarksOf(entry.bookmarks);entry.bookmarks=before.filter(value=>value.id!==bookmarkId);if(entry.bookmarks.length===before.length)return false;this.persist();return true;};
+  Pocket.prototype.jumpToLocalPosition=async function(position,options){
+    if(!this.canUseLocalTools()||typeof this.localReader.navigateToProgress!=='function')return false;
+    const reader=this.localReader,entry=this.localEntry;this.cancelLocalToolNavigation();const revision=this.localToolNavigationRevision;const moved=await reader.navigateToProgress(position,options);
+    if(moved===false||revision!==this.localToolNavigationRevision||this.localReader!==reader||this.localEntry!==entry||!this.isLocalSource())return false;
+    this.captureLocalProgress();this.show();return true;
+  };
+  Pocket.prototype.showLocalBookmarks=function(){if(!this.canUseLocalTools()){new Notice('请先打开一本本地图书');return false;}this.closeLocalTools();this.localToolsModal=new LocalBookmarks(this);this.localToolsModal.open();return true;};
+  Pocket.prototype.showLocalSearch=function(){if(!this.canUseLocalTools()||typeof createLocalBookSearch!=='function'||typeof this.localReader.getSearchParagraphs!=='function'){new Notice('请先打开一本本地图书');return false;}this.closeLocalTools();this.localToolsModal=new LocalSearch(this);this.localToolsModal.open();return true;};
   Pocket.prototype.renderLocalBookSettings=function(el){
     const p=this;
     new Setting(el).setName('本地书架').setDesc('导入 EPUB、TXT 后，复制到仓库根目录的 WeRead Pocket 文件夹；原文件保留。正文按需读取，可选原书或各窗口自定义排版。移出书架只移除记录，保留图书文件。').addButton(b=>b.setButtonText('打开书架').onClick(()=>p.showBookshelf())).addButton(b=>b.setButtonText('添加图书').onClick(()=>p.importLocalFiles())).addButton(b=>b.setButtonText('打开书籍文件夹').onClick(()=>p.revealLocalLibraryFolder()));
@@ -4132,12 +4611,15 @@ const installLocalBooks = (function installLocalBooks(Pocket, dependencies) {
   wrap('reloadPage',function(base,...args){return this.isLocalSource()?(this.localEntry?this.openLocalBook(this.localEntry.id,true):this.showBookshelf()):base.apply(this,args);});
   wrap('refreshReaderHeader',function(base,...args){return this.isLocalSource()?(this.updateLocalHeader(),Promise.resolve(null)):base.apply(this,args);});
   wrap('navigatePage',function(base,url){if(this.isLocalSource())this.useWeReadSource();return base.call(this,url);});
-  wrap('hide',function(base,...args){this.captureLocalProgress();return base.apply(this,args);});
+  wrap('hide',function(base,...args){this.closeLocalTools();this.captureLocalProgress();return base.apply(this,args);});
   wrap('updateShortcutHints',function(base,...args){const result=base.apply(this,args);this.updateLocalHeader();return result;});
   wrap('onunload',function(base,...args){this.captureLocalProgress();if(this.localEntry&&!this.__wrpValidationPersist)void this.saveData(this.settings).catch(()=>{});this.localFileOpenRevision=(this.localFileOpenRevision||0)+1;this.releaseLocalSource();this.localShelfModal?.close();return base.apply(this,args);});
-  return {normalizeLibrary,progressOf,idFor,libraryFolder,isManagedRelative,inside,libraryContext};
+  wrap('onload',async function(base,...args){const result=typeof base==='function'?await base.apply(this,args):undefined;if(this.unloaded||typeof this.addCommand!=='function')return result;
+    for(const [id,name,method] of [['add-local-bookmark','本地图书：添加当前位置书签','addLocalBookmark'],['show-local-bookmarks','本地图书：查看本书书签','showLocalBookmarks'],['search-local-book','本地图书：搜索本书正文','showLocalSearch']])this.addCommand({id,name,checkCallback:checking=>{const available=this.canUseLocalTools();if(available&&!checking)this[method]();return available;}});
+    return result;});
+  return {normalizeLibrary,progressOf,bookmarksOf,idFor,libraryFolder,isManagedRelative,inside,libraryContext,LocalBookmarks,LocalSearch};
 });
-const localBookTools = installLocalBooks(Pocket,{Modal,Setting,Notice,Menu,createLocalBookStore,createLocalReaderSurface,matchesHotkey,FONT_SIZES});
+const localBookTools = installLocalBooks(Pocket,{Modal,Setting,Notice,Menu,createLocalBookStore,createLocalReaderSurface,createLocalBookSearch,matchesHotkey,FONT_SIZES});
 // WRP_LOCAL_BOOKS_END
 module.exports=Pocket;
-module.exports._test={officialUrl,bookmarkUrl,fitRect,normalizedLayoutProfiles,normalizedCardProfiles,normalizedLiteratureLocations,normalizedUnderlineProfiles,cardDefaults,matchesHotkey,officialReaderNavigation,READER_NAVIGATION_COMMANDS,COMMAND_HOTKEYS,localBookTools,createLocalBookStore,createLocalReaderSurface};
+module.exports._test={officialUrl,bookmarkUrl,fitRect,minimumPagedPocketHeight,normalizedLayoutProfiles,normalizedCardProfiles,normalizedLiteratureLocations,normalizedUnderlineProfiles,cardDefaults,matchesHotkey,officialReaderNavigation,READER_NAVIGATION_COMMANDS,COMMAND_HOTKEYS,localBookTools,createLocalBookStore,createLocalReaderSurface};

@@ -1,4 +1,4 @@
-.wrp-panel { position:fixed; z-index:40; display:grid; grid-template-areas:"header" "layout" "body"; grid-template-columns:minmax(0,1fr); grid-template-rows:30px fit-content(50%) minmax(0,1fr); min-width:280px; min-height:180px; max-width:calc(100vw - 24px); max-height:calc(100vh - 48px); resize:both; overflow:hidden; border:1px solid var(--background-modifier-border); border-radius:8px; background:var(--background-primary); box-shadow:0 3px 18px #0002; color:var(--text-muted); }
+.wrp-panel { position:fixed; z-index:40; display:grid; grid-template-areas:"header" "layout" "body"; grid-template-columns:minmax(0,1fr); grid-template-rows:30px fit-content(50%) minmax(0,1fr); min-width:280px; min-height:var(--wrp-pocket-min-height,180px); max-width:calc(100vw - 24px); max-height:calc(100vh - 48px); resize:both; overflow:hidden; border:1px solid var(--background-modifier-border); border-radius:8px; background:var(--background-primary); box-shadow:0 3px 18px #0002; color:var(--text-muted); }
 .wrp-panel > .wrp-header { grid-area:header; }
 .wrp-panel > .wrp-layout-panel { grid-area:layout; min-height:0; max-height:none; }
 .wrp-panel > .wrp-body { grid-area:body; }
@@ -220,4 +220,34 @@
 .wrp-local-typography-row select { grid-column:2 / -1; box-sizing:border-box; width:100%; min-width:0; max-width:100%; height:28px; padding:2px 6px; font:inherit; }
 
 .wrp-local-publisher > wrp-publisher-html, .wrp-local-publisher wrp-publisher-body { display:block; }
+
+.wrp-local-reader:not(.is-publisher) .wrp-local-blank { display:none; }
+.wrp-local-reader.is-publisher .wrp-local-txt-blank { min-height:1lh; }
+.wrp-local-search-hit { outline:2px solid var(--text-accent); outline-offset:2px; background:var(--text-highlight-bg); border-radius:2px; }
+.wrp-local-card-body { overflow-x:auto; overscroll-behavior-x:contain; }
+
+::highlight(wrp-local-search-match) { background-color:var(--text-highlight-bg,#ffdf5a80); color:inherit; }
+.wrp-local-tools-modal { width:min(640px, calc(100vw - 32px)); min-width:0; max-width:calc(100vw - 32px); }
+.wrp-local-tools { display:flex; flex-direction:column; gap:10px; min-width:0; max-height:75vh; padding:4px 8px; }
+.wrp-local-tools h2 { margin:0; padding:0; font-size:var(--font-ui-large,18px); line-height:1.4; overflow-wrap:anywhere; }
+.wrp-local-tools-book, .wrp-local-tools-status { margin:0; padding:0; color:var(--text-muted); font-size:var(--font-ui-small,12px); line-height:1.5; overflow-wrap:anywhere; }
+.wrp-local-tools-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; margin:0; }
+.wrp-local-tools-controls input { flex:1 1 160px; min-width:0; max-width:100%; height:32px; margin:0; padding:4px 8px; }
+.wrp-local-tools button { flex:none; min-height:28px; height:auto; max-width:100%; margin:0; padding:4px 9px; white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
+.wrp-local-tools button[hidden] { display:none; }
+.wrp-local-tools-list { display:flex; flex-direction:column; flex:1; gap:6px; min-width:0; min-height:80px; max-height:55vh; margin:0; padding:2px; overflow:auto; overscroll-behavior:contain; }
+.wrp-local-tool-row { display:flex; align-items:center; gap:8px; min-width:0; padding:6px; border:1px solid var(--background-modifier-border); border-radius:5px; }
+.wrp-local-tool-row .wrp-local-tool-jump { display:flex; flex-direction:column; flex:1; align-items:flex-start; gap:4px; min-width:0; height:auto; padding:4px; border:0; background:transparent; box-shadow:none; color:var(--text-normal); text-align:start; }
+.wrp-local-tool-jump:hover { background:var(--background-modifier-hover); }
+.wrp-local-tool-meta { color:var(--text-muted); font-size:var(--font-ui-small,12px); line-height:1.5; }
+.wrp-local-tool-excerpt { font-size:var(--font-ui-medium,14px); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; text-align:start; }
+.wrp-local-tool-excerpt mark { background:var(--text-highlight-bg); color:inherit; }
+.wrp-local-tool-empty { margin:8px; padding:0; font-size:var(--font-ui-small,12px); color:var(--text-muted); line-height:1.5; }
+@media (max-width:420px) {
+  .wrp-local-tools { padding-inline:4px; }
+  .wrp-local-tools-controls input { flex-basis:100%; }
+  .wrp-local-tool-row { gap:4px; padding:4px; }
+}
 /* WRP_LOCAL_READER_STYLES_END */
+
+.wrp-button[hidden] { display:none !important; }
